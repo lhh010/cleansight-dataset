@@ -1,0 +1,21 @@
+# 配置文件（含敏感信息）
+config.py
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 导出数据（体积较大，且可通过脚本重新生成）
+exports/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+.claude
+raw-from Label Studio/
+
