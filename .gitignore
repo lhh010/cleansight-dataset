@@ -18,4 +18,7 @@ Thumbs.db
 
 .claude
 raw-from Label Studio/
+cleansight-yolo-pipeline/raw/
+.obsidian/
+
 
