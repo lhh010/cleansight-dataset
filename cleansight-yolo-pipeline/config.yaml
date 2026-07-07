@@ -1,0 +1,45 @@
+# yolo_pipeline 中央配置。改这里,不要改脚本。
+# ---------------------------------------------------------------------------
+
+# 分组:组名 -> 该组的 YOLO 显示名列表(顺序即 class id,各组从 0 开始)。
+# 未列入任何组的检测类(如 short_brush、brush_tip_out)自动忽略。
+# 加类别只能追加到列表末尾——插中间会打乱已训权重的 class id 映射。
+groups:
+  group1_large: [hand, scope_control_body, scope_mid_section]
+  group2_small: [syringe, air_gun, scope_distal_end, short_brush, brush_tip_out]
+
+# 已通过人工质检、确认标注完成(只有这些任务进数据集)。
+only_videos:
+  - 4807dbbe-clip      # task#59
+  - 65d70028-clip      # task#61
+  - 63a848d5-clip      # task#68
+
+# 抽帧 / 图像
+stride: 4           # 每隔多少真实帧抽一张(30fps 下 4 ≈ 每秒 7.5 张)
+jpg_quality: 90
+
+# 稀有类别密集采样：对框数 < rare_threshold 的类别，在正常抽帧之外
+# 额外采集其相邻帧（±(stride-1) 范围），以自然方式增加稀有样本。
+rare_dense_sampling: true
+rare_threshold: 200       # 某类在所有确认任务中的总 keyframe 数低于此值即触发密集采样
+
+# 稳定切分参数(与 splits.yaml 顶部保持一致;splits.yaml 是分配的唯一真源)
+test_ratio: 0.2     # 未归属视频确定性回填时,落到 test 的比例(新增三路切分)
+val_ratio: 0.2      # 未归属视频确定性回填时,落到 val 的比例
+seed: 1337          # 确定性 hash 的盐;改了会重排未来的新视频分配(不动已有)
+
+# 训练超参
+train:
+  model: yolo11n.pt   # nano:小数据集 + 快;要更准换 yolo11s.pt
+  epochs: 100
+  imgsz: 640
+  batch: 16
+  patience: 20        # 连续多少 epoch 无提升则早停
+
+# 验收标准(可调)。04_validate 用它判 PASS/FAIL。
+# 当前数据集很小,大概率 FAIL,属实——数据变多后再收紧。
+acceptance:
+  overall_map50: 0.5       # 整体 mAP@0.5 下限
+  overall_map50_95: 0.3    # 整体 mAP@0.5:0.95 下限
+  per_class_recall: 0.7    # 逐类 recall 下限(漏检代价高)
+  per_class_precision: 0.5 # 逐类 precision 下限
