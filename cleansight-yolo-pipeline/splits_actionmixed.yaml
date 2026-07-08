@@ -1,0 +1,25 @@
+# ActionMixed split assignments — separate from YOLO / ActionSequence.
+#
+# Same rules as splits.yaml:
+#   - Videos already assigned: stick forever (manual edits respected).
+#   - New videos: assigned deterministically via hash(seed:stem).
+#   - One video's frames → single split (no cross-split leakage).
+#
+# Small data mode (≤ 5 tasks): train + test only (no val), ~80/20.
+# Larger data: train:val:test = 6:2:2.
+#
+test_ratio: 0.2
+val_ratio: 0.2
+seed: 1337
+
+assignments:
+  05ba4406-clip_1781584018103_1781584033616: val
+  218f9117-clip_1781583985044_1781584006285: train
+  2c635ddc-clip_1782695261284_1782695331171: val
+  4807dbbe-clip_1781659328328_1781659467929: test
+  63a848d5-clip_1782695363948_1782695590302: train
+  65d70028-clip_1781661552468_1781661702909: val
+  7e8f5b4f-clip_1781584064111_1781584068667: train
+  9f93cf16-clip_1781584034867_1781584043290: train
+  af0e7803-clip_1781584048438_1781584063735: val
+  b004acff-clip_1781584008145_1781584016511: train

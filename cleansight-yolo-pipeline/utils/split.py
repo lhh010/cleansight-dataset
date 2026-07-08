@@ -33,7 +33,8 @@ def load(splits_path: Path = SPLITS_PATH) -> dict:
     if not splits_path.exists():
         return {"val_ratio": 0.2, "seed": 1337, "assignments": {}}
     data = yaml.safe_load(splits_path.read_text(encoding="utf-8")) or {}
-    data.setdefault("assignments", {})
+    if not data.get("assignments"):
+        data["assignments"] = {}
     data.setdefault("test_ratio", 0.2)
     data.setdefault("val_ratio", 0.2)
     data.setdefault("seed", 1337)
