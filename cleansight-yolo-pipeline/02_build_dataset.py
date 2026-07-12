@@ -45,7 +45,7 @@ def write_data_yamls(groups):
     for g, labels in groups.items():
         names = "\n".join(f"  {i}: {lab}" for i, lab in enumerate(labels))
         (OUT_ROOT / g / "data.yaml").write_text(
-            f"path: {(OUT_ROOT / g).resolve()}\n"
+            f"path: .\n"
             f"train: images/train\nval: images/val\ntest: images/test\n"
             f"nc: {len(labels)}\nnames:\n{names}\n",
             encoding="utf-8",

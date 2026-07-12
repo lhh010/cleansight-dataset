@@ -66,7 +66,7 @@ def write_data_yamls():
     names = "\n".join(f"  {i}: {lab}" for i, lab in enumerate(UNIFIED_CLASSES))
     for phase in ALL_PHASES:
         (OUT_ROOT / phase / "data.yaml").write_text(
-            f"path: {(OUT_ROOT / phase).resolve()}\n"
+            f"path: .\n"
             f"train: images/train\nval: images/val\ntest: images/test\n"
             f"nc: {len(UNIFIED_CLASSES)}\nnames:\n{names}\n",
             encoding="utf-8",

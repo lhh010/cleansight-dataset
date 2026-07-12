@@ -393,7 +393,7 @@ def check_dataset(
 
 def print_result(result: CheckResult, verbose: bool = True) -> bool:
     """终端友好的结果输出。返回是否通过。"""
-    status = "PASS ✅" if result.passed else "FAIL ❌"
+    status = "PASS" if result.passed else "FAIL"
     print(f"\n{'=' * 60}")
     print(f"  {result.name}: {status}")
     print(f"{'=' * 60}")
@@ -401,12 +401,12 @@ def print_result(result: CheckResult, verbose: bool = True) -> bool:
     if result.errors:
         print(f"\n  [ERROR] {len(result.errors)} 项必须修复:")
         for e in result.errors:
-            print(f"    ✗ {e}")
+            print(f"    X {e}")
 
     if result.warnings and verbose:
         print(f"\n  [WARN]  {len(result.warnings)} 项建议关注:")
         for w in result.warnings:
-            print(f"    ⚠ {w}")
+            print(f"    ! {w}")
 
     if result.passed and not result.warnings:
         print(f"\n  全部校验通过，可以推送。")

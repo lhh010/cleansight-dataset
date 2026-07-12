@@ -1,7 +1,7 @@
 # CleanSight ActionMixed — Processing Record
 
-**Generated**: 2026-07-08 22:28:05
-**Export**: project-10-at-2026-07-08-03-42-1df45c91.json
+**Generated**: 2026-07-12 11:09:02
+**Export**: project-10-at-2026-07-12-02-49-086781a3.json
 
 ## Dataset Overview
 
@@ -36,14 +36,16 @@ datasets_actionmixed/
 | 61 | 65d70028-clip_1781661552468_17 | 4514 | flush, long_brush_insert, long_brush_withdraw | long_brush_insert[1-250]→train(82), long_brush_withdraw[253-369]→val(43), long_brush_insert[438-701]→train(116), long_brush_withdraw[713-1050]→train(241), flush[2215-2325]→train(43), flush[2338-2638]→train(79), flush[2656-2800]→train(40), flush[2813-3000]→train(51), flush[3025-3150]→train(38), flush[3175-3413]→val(64), flush[3425-3563]→train(38), flush[3581-3681]→train(40) |
 | 68 | 63a848d5-clip_1782695363948_17 | 6791 | flush, long_brush_insert, long_brush_withdraw | flush[56-250]→train(64), flush[262-456]→test(53), flush[481-644]→train(46), flush[662-906]→train(94), long_brush_insert[1475-1537]→train(29), long_brush_withdraw[1544-1787]→train(66), long_brush_insert[1812-2275]→train(129), long_brush_withdraw[2281-2537]→train(72), long_brush_insert[2550-3025]→test(141), long_brush_withdraw[3031-3175]→train(59), flush[3337-3550]→train(75), flush[3562-3837]→val(72), flush[3850-4037]→val(50), flush[4050-4225]→val(47), flush[4237-4556]→train(82), flush[4562-4787]→val(58), flush[4800-5062]→train(99), flush[5312-5487]→train(77), flush[5575-5744]→val(57), flush[5775-6050]→train(107) |
 | 69 | 2c635ddc-clip_1782695261284_17 | 2096 | short_brush_cleaning | short_brush_cleaning[187-282]→train(100), short_brush_cleaning[320-384]→train(53), short_brush_cleaning[486-661]→val(193) |
+| 77 | fedf6ff9-clip_1783393131145_17 | 1597 | flush, short_brush_cleaning | short_brush_cleaning[155-235]→train(85), short_brush_cleaning[331-475]→test(126), short_brush_cleaning[500-625]→val(170), short_brush_cleaning[836-925]→val(134), short_brush_cleaning[988-1025]→train(70), flush[1362-1550]→test(209) |
+| 78 | b1b042a9-clip_1783395777441_17 | 957 | long_brush_insert, long_brush_withdraw | long_brush_insert[245-691]→train(183), long_brush_withdraw[816-931]→val(50) |
 
 ## Split Summary (by segment-level assignment)
 
 | Split | Segments | Frames |
 |-------|----------|--------|
-| train | 35 | 2963 |
-| val | 13 | 1175 |
-| test | 5 | 490 |
+| train | 38 | 3301 |
+| val | 16 | 1529 |
+| test | 7 | 825 |
 
 ## Per-Task Split Breakdown
 
@@ -59,6 +61,8 @@ datasets_actionmixed/
 | 61 | 768 | 107 | 0 |
 | 68 | 999 | 284 | 194 |
 | 69 | 153 | 193 | 0 |
+| 77 | 155 | 304 | 335 |
+| 78 | 183 | 50 | 0 |
 
 ## Action Classes
 

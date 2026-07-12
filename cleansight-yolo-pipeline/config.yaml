@@ -20,6 +20,8 @@ only_videos:
   - af0e7803-clip      # task#54
   - 7e8f5b4f-clip      # task#55
   - 2c635ddc-clip      # task#69
+  - fedf6ff9-clip      # task#77
+  - b1b042a9-clip      # task#78
 
 # 抽帧 / 图像
 stride: 4           # 每隔多少真实帧抽一张(30fps 下 4 ≈ 每秒 7.5 张)
