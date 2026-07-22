@@ -1,7 +1,7 @@
 # CleanSight Dataset Status
 
-**Generated**: 2026-07-12 14:03:31
-**Export**: project-10-at-2026-07-12-02-49-086781a3.json
+**Generated**: 2026-07-18 18:13:32
+**Export**: project-10-at-2026-07-18-07-58-e8b8781a.json
 
 ## Task Status
 
@@ -19,32 +19,44 @@
 | 60 | a2ade960-clip_1781660307856_1781660 | [NO] | — | long_brush_insert, long_brush_withdraw, short_brush_cleaning | 6 | — |
 | 61 | 65d70028-clip_1781661552468_1781661 | [NO] | — | flush, long_brush_insert, long_brush_withdraw | 6 | — |
 | 62 | 3614fb62-clip_1782091187000_1782091 | [NO] | — | air_injection, flush, long_brush_insert, long_brush_withdraw | 7 | — |
-| 63 | 54b6e047-clip_1782097591695_1782097 | [NO] | — | — | 0 | — |
+| 63 | 54b6e047-clip_1782097591695_1782097 | [NO] | — | — | 1 | — |
 | 64 | 14e6fadd-clip_1782094867317_1782095 | [NO] | — | — | 0 | — |
 | 68 | 63a848d5-clip_1782695363948_1782695 | [NO] | — | flush, long_brush_insert, long_brush_withdraw | 6 | — |
 | 69 | 2c635ddc-clip_1782695261284_1782695 | [NO] | — | short_brush_cleaning | 6 | — |
 | 71 | 37c53d37-clip_1782286495080_1782286 | [NO] | — | long_brush_insert, long_brush_withdraw, short_brush_cleaning | 4 | — |
+| 73 | f4b10ad8-clip_1782264442808_1782264 | [NO] | — | air_injection | 4 | — |
 | 75 | af4ea419-clip_1782955721678_1782955 | [NO] | — | air_injection, long_brush_insert, short_brush_cleaning | 6 | — |
 | 76 | b3f244c7-clip_1782954681773_1782954 | [NO] | — | — | 4 | — |
 | 77 | fedf6ff9-clip_1783393131145_1783393 | [NO] | — | flush, short_brush_cleaning | 6 | — |
 | 78 | b1b042a9-clip_1783395777441_1783395 | [NO] | — | long_brush_insert, long_brush_withdraw | 3 | — |
+| 80 | 6b722939-clip_1782802545949_1782802 | [NO] | — | air_injection, flush, short_brush_cleaning | 6 | — |
+| 82 | 3d3ec766-clip_1782869840929_1782869 | [NO] | — | air_injection | 4 | — |
+| 83 | 1301ed4c-clip_1782871306647_1782871 | [NO] | — | air_injection, long_brush_insert, long_brush_withdraw | 4 | — |
+| 84 | f0d28b80-clip_1783302144895_1783302 | [OK] | train | air_injection, short_brush_cleaning | 4 | 693 |
+| 85 | 1fcfcdea-clip_1783302201419_1783302 | [OK] | train | long_brush_insert, long_brush_withdraw | 5 | 592 |
+| 86 | 78f3593a-clip_1783301769259_1783301 | [NO] | — | — | 0 | — |
+| 87 | b3778449-clip_1783301814930_1783301 | [NO] | — | — | 0 | — |
+| 88 | 3b2dcda0-clip_1783306816456_1783306 | [NO] | — | — | 0 | — |
+| 89 | ab4e3537-clip_1783306867441_1783306 | [NO] | — | — | 0 | — |
+| 90 | 3c6d95a9-clip_1783306980410_1783306 | [NO] | — | — | 0 | — |
+| 91 | 8379a7c3-clip_1783566098640_1783566 | [NO] | — | — | 4 | — |
 
 ## Group Summary
 
 | Group | Split | Images | Boxes |
 |-------|-------|--------|-------|
-| group1_large | train | 4199 | 14850 |
+| group1_large | train | 9100 | 30809 |
 | group1_large | val | 1244 | 4722 |
-| group1_large | test | 1310 | 4281 |
-| group2_small | train | 2556 | 3562 |
+| group1_large | test | 2496 | 8131 |
+| group2_small | train | 6604 | 9140 |
 | group2_small | val | 1122 | 1350 |
-| group2_small | test | 953 | 1761 |
+| group2_small | test | 1900 | 3516 |
 
 ## Split Assignment
 
 | Split | Tasks |
 |-------|-------|
-| train | — |
+| train | 84, 85 |
 | val | — |
 | test | — |
 

@@ -26,3 +26,7 @@ assignments:
   b1b042a9-clip_1783395777441_1783395809343: test     # task#78
   ed1f1353-clip_1781659288372_1781659325362: train    # task#58
   fedf6ff9-clip_1783393131145_1783393184404: test     # task#77
+  1fcfcdea-clip_1783302201419_1783302261914: train    # task#85 (rare: brush_tip_out)
+  3614fb62-clip_1782091187000_1782091376956: train    # task#62 (rare: air_gun, brush_tip_out)
+  a2ade960-clip_1781660307856_1781660585237: train    # task#60 (rare: short_brush)
+  f0d28b80-clip_1783302144895_1783302187855: train    # task#84 (rare: air_gun)
