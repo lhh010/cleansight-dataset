@@ -14,8 +14,8 @@ Each LS task's frames stay in the same split (no cross-split leakage).
 Rotated bboxes are automatically converted to AABB.
 
 Usage:
-    python3 02_build_actionseq.py
-    python3 02_build_actionseq.py --auto-assign
+    python3 actionseq/02_build.py
+    python3 actionseq/02_build.py --auto-assign
 """
 import json
 import shutil
@@ -26,6 +26,10 @@ from pathlib import Path
 
 import cv2
 from PIL import Image
+
+# --- 从子目录运行时也能 import 顶层 utils/;HERE = 本数据集目录 ---
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
 
 from utils.common import ROOT, load_config, is_whitelisted
 from utils import lsexport, split as splitmod, stats
@@ -98,7 +102,7 @@ def main():
     sp = splitmod.load()
 
     # ---- 增量 ----
-    completed_path = ROOT / "completed_tasks_actionseq.json"
+    completed_path = HERE / "completed_tasks_actionseq.json"
     completed = {}
     if completed_path.exists():
         completed = json.loads(completed_path.read_text(encoding="utf-8"))
@@ -468,7 +472,7 @@ def generate_readme(task_stats, json_path):
         "## 处理流水线",
         "",
         "1. Label Studio 导出 JSON → `raw/exports/`",
-        "2. `02_build_actionseq.py` — 旋转框 AABB 修正 → 阶段过滤 → 抽帧 → YOLO 输出",
+        "2. `actionseq/02_build.py` — 旋转框 AABB 修正 → 阶段过滤 → 抽帧 → YOLO 输出",
         "3. 上传至 ModelScope",
         "",
         "## 相关链接",

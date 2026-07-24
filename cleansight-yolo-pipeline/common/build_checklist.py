@@ -3,10 +3,10 @@
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
 EXP = ROOT / "raw" / "exports" / "project-10-at-2026-07-12-02-49-086781a3.json"
 VID_DIR = ROOT / "raw" / "videos"
-COMPLETED = ROOT / "completed_tasks.json"
+COMPLETED = ROOT / "yolo" / "completed_tasks.json"   # yolo 数据集的完成清单
 SPLITS = ROOT / "splits.yaml"
 
 DET = {0:"hand",1:"scope_control_body",2:"scope_mid_section",3:"scope_distal_end",

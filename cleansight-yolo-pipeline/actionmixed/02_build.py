@@ -15,9 +15,9 @@ before and after (up to half the segment length, constrained by video bounds and
 adjacent-segment midpoints). All sampled frames in extended ranges are included.
 
 Usage:
-    python3 02_build_actionmixed.py
-    python3 02_build_actionmixed.py --auto-assign
-    python3 02_build_actionmixed.py --force
+    python3 actionmixed/02_build.py
+    python3 actionmixed/02_build.py --auto-assign
+    python3 actionmixed/02_build.py --force
 """
 import json
 import sys
@@ -28,13 +28,17 @@ from pathlib import Path
 import cv2
 from PIL import Image
 
+# --- 从子目录运行时也能 import 顶层 utils/;HERE = 本数据集目录 ---
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+
 from utils.common import ROOT, load_config, is_whitelisted
 from utils import lsexport, split as splitmod
 
 OUT_ROOT = ROOT / "datasets_actionmixed"
 
 # Split management for ActionMixed — segment-level (no per-video splits file needed)
-COMPLETED_PATH = ROOT / "completed_tasks_actionmixed.json"
+COMPLETED_PATH = HERE / "completed_tasks_actionmixed.json"
 
 # Unified detection classes (same across all datasets)
 UNIFIED_CLASSES = [
@@ -693,7 +697,7 @@ def generate_tracking(task_stats, all_tasks, json_path, only_videos, action_name
         "> Rotated bboxes auto-converted to AABB (YOLO compatible).",
     ])
 
-    (ROOT / "tracking_actionmixed.md").write_text(
+    (HERE / "tracking_actionmixed.md").write_text(
         "\n".join(lines) + "\n", encoding="utf-8",
     )
     print("tracking_actionmixed.md generated.")

@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from collections import defaultdict
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
 EXP = ROOT / "raw" / "exports" / "project-10-at-2026-07-12-02-49-086781a3.json"
 VID_DIR = ROOT / "raw" / "videos"
 

@@ -18,16 +18,16 @@
 
 原始标注数据经过 **cleansight-yolo-pipeline** 标准化流水线的以下步骤处理：
 
-### 1. 数据拉取（01_pull_data.py）
+### 1. 数据拉取（common/01_pull_data.py）
 - 从 Label Studio 服务器下载导出 JSON 中引用的原始视频到本地 `raw/videos/`
 - 对每个视频做完整性校验（ffprobe 读时长/帧数）
 
-### 2. 对账与切分（00_status.py + splits.yaml）
+### 2. 对账与切分（common/00_status.py + splits.yaml）
 - 对齐"导出 JSON / 本地视频 / 白名单 / 切分清单"四方数据
 - **按 Label Studio 任务粒度**分配 train/val/test（`splits.yaml` 为唯一真源）
 - **关键约束**：同一 LS 任务的所有帧全部进入同一 split，绝不跨 split，杜绝时间相邻帧泄漏
 
-### 3. 转 YOLO 格式（02_build_dataset.py）
+### 3. 转 YOLO 格式（yolo/02_build.py）
 - **关键帧对齐**：LS 标注帧号按标注端 fps 计算，通过 `scale = ls_fps/real_fps` 映射到真实帧号，消除漂移
 - **线性插值**：LS 只存关键帧 bbox，中间帧由相邻关键帧线性插值得到；`enabled=False` 表示目标离场
 - **抽帧采样**：`stride=12`（30fps 下约 2.5 张/秒），仅保留含分组内目标的帧（空帧丢弃）
@@ -39,7 +39,7 @@
 ```
 splits.yaml（入库，唯一真源）
     ↓
-02_build_dataset.py 读取每个视频的 split
+yolo/02_build.py 读取每个视频的 split
     ↓
 同一视频所有帧 → 全部进入该 split
     ↓
@@ -225,26 +225,26 @@ python -m venv .venv
 # 1. 将 LS 导出 JSON 放入 raw/exports/
 # 2. 下载视频
 export LS_HOST=http://<LS地址>:8080 LS_TOKEN=<AccessToken>
-python 01_pull_data.py
+python common/01_pull_data.py
 
 # 3. 对账 & 分配 split
-python 00_status.py               # 查看状态
-python 00_status.py --assign      # 确定性回填 split（写入 splits.yaml）
+python common/00_status.py        # 查看状态
+python common/00_status.py --assign  # 确定性回填 split（写入 splits.yaml）
 # 必要时手工调整 splits.yaml
 
 # 4. 生成 YOLO 数据集
-python 02_build_dataset.py
+python yolo/02_build.py
 
 # 5. 训练 & 验证（可选）
-python 03_train.py
-python 04_validate.py
+python yolo/03_train.py
+python yolo/04_validate.py
 ```
 
 ### 上传到 ModelScope
 
 ```bash
-# 在项目根目录执行
-python upload_yolo_to_modelscope.py
+# 在 cleansight-yolo-pipeline 目录下执行
+python yolo/upload.py
 ```
 
 上传脚本将 `cleansight-yolo-pipeline/datasets/` 下的各组分目录上传到 `lhh010/cleansight-yolo`。
@@ -253,12 +253,12 @@ python upload_yolo_to_modelscope.py
 
 ```bash
 # 新导出 JSON 放入 raw/exports/
-python 00_status.py               # 看差异
-python 01_pull_data.py            # 补下新视频
+python common/00_status.py        # 看差异
+python common/01_pull_data.py     # 补下新视频
 # 质检新视频后追加到 config.yaml 的 only_videos
-python 00_status.py --assign      # 仅回填新视频，已有 split 不变
-python 02_build_dataset.py        # 重建数据集
-python upload_yolo_to_modelscope.py  # 更新 ModelScope
+python common/00_status.py --assign  # 仅回填新视频，已有 split 不变
+python yolo/02_build.py           # 重建数据集
+python yolo/upload.py             # 更新 ModelScope
 ```
 
 ---

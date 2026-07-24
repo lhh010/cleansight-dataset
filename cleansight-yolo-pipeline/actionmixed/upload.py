@@ -7,24 +7,29 @@ Uploads:
   - datasets_actionmixed/README.md (if exists)
   - tracking_actionmixed.md
 
-Usage:
-    python upload_actionmixed_to_modelscope.py
+Usage (在 cleansight-yolo-pipeline/ 下执行):
+    python actionmixed/upload.py
 """
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "cleansight-yolo-pipeline"))
+# 本脚本位于 cleansight-yolo-pipeline/actionmixed/;定位 pipeline 根(取 utils/)与仓库根(取 config.py)
+from pathlib import Path
+HERE = Path(__file__).resolve()
+PIPELINE_ROOT = HERE.parents[1]          # cleansight-yolo-pipeline/
+REPO_ROOT = HERE.parents[2]              # 仓库根(config.py 所在,含密钥)
+sys.path.insert(0, str(PIPELINE_ROOT))   # → utils/
+sys.path.insert(0, str(REPO_ROOT))       # → config.py
 
 from modelscope.hub.api import HubApi
 from config import MS_ACCESS_TOKEN, MS_ACTIONMIXED_REPO_ID
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASETS_PATH = os.path.join(BASE_DIR, "cleansight-yolo-pipeline", "datasets_actionmixed")
+DATASETS_PATH = str(PIPELINE_ROOT / "datasets_actionmixed")
 
 if not os.path.isdir(DATASETS_PATH):
     raise SystemExit(
         f"ActionMixed dataset not found at {DATASETS_PATH}. "
-        f"Run cleansight-yolo-pipeline/02_build_actionmixed.py first."
+        f"Run actionmixed/02_build.py first."
     )
 
 api = HubApi()
@@ -32,7 +37,7 @@ api.login(MS_ACCESS_TOKEN)
 
 # ---- Upload top-level docs ----
 for doc in ["README.md", "tracking_actionmixed.md"]:
-    doc_path = os.path.join(BASE_DIR, "cleansight-yolo-pipeline", doc) \
+    doc_path = str(HERE.parent / doc) \
         if doc == "tracking_actionmixed.md" else os.path.join(DATASETS_PATH, doc)
     if os.path.exists(doc_path):
         name = os.path.basename(doc_path)

@@ -5,11 +5,15 @@
 
 需 torch + ultralytics —— 用本项目 .venv/bin/python 跑(见 requirements.txt)。
 
-用法(在 yolo_pipeline/ 下执行):
-    <py> 03_train.py                 # 全部组
-    <py> 03_train.py group2_small    # 只训某组
+用法(在 cleansight-yolo-pipeline/ 下执行):
+    <py> yolo/03_train.py                 # 全部组
+    <py> yolo/03_train.py group2_small    # 只训某组
 """
 import sys
+
+# --- 从子目录运行时也能 import 顶层 utils/ ---
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import ROOT, load_config
 
@@ -36,13 +40,13 @@ def main():
     requested = [a for a in sys.argv[1:] if not a.startswith("-")]
     groups = requested or [p.name for p in sorted(DATASETS.iterdir()) if p.is_dir()]
     if not groups:
-        raise SystemExit(f"datasets/ 下没有数据集组,请先跑 02_build_dataset.py: {DATASETS}")
+        raise SystemExit(f"datasets/ 下没有数据集组,请先跑 yolo/02_build.py: {DATASETS}")
 
     results = []
     for g in groups:
         data = DATASETS / g / "data.yaml"
         if not data.exists():
-            print(f"  [skip] {g}: 缺 data.yaml,先跑 02_build_dataset.py")
+            print(f"  [skip] {g}: 缺 data.yaml,先跑 yolo/02_build.py")
             continue
         print(f"\n=== 训练 {g}  (device={device}, model={tcfg.get('model')}) ===")
         model = YOLO(tcfg.get("model", "yolo11n.pt"))

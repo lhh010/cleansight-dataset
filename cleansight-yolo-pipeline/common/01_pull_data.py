@@ -5,16 +5,20 @@
 JSON 只存路径引用(data.video),视频本体在服务器。已存在且非空的文件会 [skip]。
 下载后做完整性抽查:优先 ffprobe 读时长/帧数;没有 ffprobe 时退化为"大小 > 0"。
 
-用法(在 yolo_pipeline/ 下执行):
+用法(在 cleansight-yolo-pipeline/ 下执行):
     export LS_HOST=http://<LS地址>:8080
     export LS_TOKEN=<AccessToken>     # LS 页面 Account & Settings -> Access Token
-    python3 01_pull_data.py
+    python3 common/01_pull_data.py
 """
 import os
 import shutil
 import subprocess
 import sys
 import urllib.request
+
+# --- 从子目录运行时也能 import 顶层 utils/ ---
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import load_config
 from utils import lsexport
@@ -83,7 +87,7 @@ def main():
         print(f"⚠️ 疑似损坏 {len(bad)} 个,建议删掉重下: {', '.join(bad)}")
     if fail:
         print("失败多半是 LS_HOST/LS_TOKEN 不对,或视频接的是云存储(去云端原始位置取)")
-    print("下一步:python3 00_status.py 看增量待办")
+    print("下一步:python3 common/00_status.py 看增量待办")
 
 
 if __name__ == "__main__":

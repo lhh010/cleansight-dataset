@@ -38,6 +38,8 @@
 
 ## ActionSequence 汇总
 
+> ⚠️ 已弃用:ActionSequence 已从活跃流水线移除(脚本归档至 `archive/actionseq/`);以下为历史记录。以段级 cleansight-ActionMixed 为准。
+
 | 阶段 | Train | Val | Test | 合计 |
 |------|-------|-----|------|------|
 | short_brush_cleaning | 252 | 0 | 0 | 252 |

@@ -15,11 +15,15 @@
   未归属  已质检但 splits.yaml 没分配 -> 跑本脚本 --assign 回填
   遗失    splits.yaml 有但磁盘没有    -> 悬挂项,重下或从 splits.yaml 删(不自动删)
 
-用法(在 yolo_pipeline/ 下执行):
-  python3 00_status.py            # 只读,打印状态
-  python3 00_status.py --assign   # 给"未归属"确定性回填 split 并写回 splits.yaml
+用法(在 cleansight-yolo-pipeline/ 下执行):
+  python3 common/00_status.py            # 只读,打印状态
+  python3 common/00_status.py --assign   # 给"未归属"确定性回填 split 并写回 splits.yaml
 """
 import sys
+
+# --- 从子目录运行时也能 import 顶层 utils/ ---
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import load_config, is_whitelisted
 from utils import lsexport, split as splitmod

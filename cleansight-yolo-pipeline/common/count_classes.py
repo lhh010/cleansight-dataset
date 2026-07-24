@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""统计 yolo / actionmixed / actionseq 三类数据集中各类样本数量。"""
+"""统计 yolo / actionmixed 两类数据集中各类样本数量。"""
 import re
 from pathlib import Path
 from collections import defaultdict
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
 
 
 def parse_names(yaml_path):
@@ -121,41 +121,3 @@ for split in ("train", "val", "test"):
         agg[k] += v
     nfiles += nf
 report("[actionmixed/labels] 动作分类 (逐帧)", anames, agg, "帧", nfiles)
-
-# ============ 3. actionseq 数据集 ============
-print("\n" + "#" * 56)
-print("# 3. actionseq 数据集 (datasets_actionseq/) — 每动作一目录")
-print("#" * 56)
-asq = ROOT / "datasets_actionseq"
-
-# 3a. 每个动作目录的图像/样本数
-print(f"\n--- [actionseq] 各动作类样本数(图像数, train+val+test) ---")
-print(f"{'动作类别':<26}{'train':<10}{'val':<10}{'test':<10}{'合计':<10}")
-print("-" * 56)
-action_totals = []
-for act in sorted(d.name for d in asq.iterdir() if d.is_dir()):
-    adir = asq / act
-    if not (adir / "data.yaml").exists():
-        continue
-    per = {}
-    for split in ("train", "val", "test"):
-        per[split] = count_images(adir / "images" / split)
-    tot = sum(per.values())
-    action_totals.append((act, per, tot))
-    print(f"{act:<26}{per['train']:<10}{per['val']:<10}{per['test']:<10}{tot:<10}")
-gtot = sum(t for _, _, t in action_totals)
-print("-" * 56)
-print(f"{'合计':<26}{'':<30}{gtot:<10}")
-
-# 3b. 每个动作目录内的目标检测 bbox 分布
-names8 = parse_names(asq / "short_brush_cleaning" / "data.yaml")
-for act, per, tot in action_totals:
-    adir = asq / act
-    agg = defaultdict(int)
-    nfiles = 0
-    for split in ("train", "val", "test"):
-        c, nf = count_bbox(adir / "labels" / split, names8)
-        for k, v in c.items():
-            agg[k] += v
-        nfiles += nf
-    report(f"[actionseq/{act}] bbox (图像 {tot})", names8, agg, "bbox", nfiles)

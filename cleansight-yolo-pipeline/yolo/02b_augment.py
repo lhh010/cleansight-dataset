@@ -9,10 +9,10 @@
   - 每帧默认生成 3 个增强副本（可配置）
 
 用法（在 cleansight-yolo-pipeline/ 下执行）：
-    python3 02b_augment.py
-    python3 02b_augment.py --dry-run        # 只统计，不生成
-    python3 02b_augment.py --threshold 30   # 自定义稀有阈值（默认 50 框）
-    python3 02b_augment.py --copies 5       # 每帧增强副本数（默认 3）
+    python3 yolo/02b_augment.py
+    python3 yolo/02b_augment.py --dry-run        # 只统计，不生成
+    python3 yolo/02b_augment.py --threshold 30   # 自定义稀有阈值（默认 50 框）
+    python3 yolo/02b_augment.py --copies 5       # 每帧增强副本数（默认 3）
 """
 import math
 import random
@@ -22,6 +22,10 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+
+# --- 从子目录运行时也能 import 顶层 utils/ ---
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import ROOT, load_config
 

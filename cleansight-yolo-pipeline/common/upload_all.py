@@ -3,11 +3,10 @@
 Upload built datasets to ModelScope repos via git.
 
 Repos:
-  - lhh010/cleansight-yolo           ← datasets/{group1_large,group2_small}
-  - lhh010/cleansight-ActionSequence  ← datasets_actionseq/
-  - lhh010/cleansight-ActionMixed     ← datasets_actionmixed/
+  - lhh010/cleansight-yolo         ← datasets/{group1_large,group2_small}
+  - lhh010/cleansight-ActionMixed  ← datasets_actionmixed/
 
-Usage: python upload_to_modelscope.py [--dry-run]
+Usage: python common/upload_all.py [--dry-run]
 """
 import os
 import shutil
@@ -15,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
 TMP = ROOT.parent / "_upload_tmp"
 
 REPOS = [
@@ -27,14 +26,6 @@ REPOS = [
             (ROOT / "datasets" / "group2_small", "group2_small"),
         ],
         "extra_files": [],  # tracking.md etc not needed in repo
-    },
-    {
-        "name": "cleansight-ActionSequence",
-        "url": "https://www.modelscope.cn/datasets/lhh010/cleansight-ActionSequence.git",
-        "sources": [
-            (ROOT / "datasets_actionseq", "."),
-        ],
-        "extra_files": [],
     },
     {
         "name": "cleansight-ActionMixed",

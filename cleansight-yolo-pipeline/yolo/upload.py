@@ -1,48 +1,48 @@
-"""Upload phase-segmented YOLO dataset to ModelScope at lhh010/cleansight-yolo.
+"""Upload YOLO detection dataset to ModelScope at lhh010/cleansight-yolo.
 
-Uploads cleansight-yolo-pipeline/datasets/<phase>/ (images, labels, data.yaml)
-for each phase. Also uploads tracking.md to the repo root.
+Uploads each group dir under cleansight-yolo-pipeline/datasets/ (images, labels,
+data.yaml). Also uploads yolo/tracking.md to the repo root.
 
   lhh010/cleansight-yolo/
     tracking.md
-    long_brush_insert/
+    group1_large/
       images/{train,val,test}/*.jpg
       labels/{train,val,test}/*.txt
       data.yaml
-    long_brush_withdraw/
-      ...
-    air_injection/
-      ...
-    flush/
+    group2_small/
       ...
 
-Usage:
-    python upload_yolo_to_modelscope.py              # 上传前自动校验
-    python upload_yolo_to_modelscope.py --skip-check # 跳过校验直接上传
+Usage (在 cleansight-yolo-pipeline/ 下执行):
+    python yolo/upload.py              # 上传前自动校验
+    python yolo/upload.py --skip-check # 跳过校验直接上传
 
 Prerequisite:
-    Run cleansight-yolo-pipeline/02_build_dataset.py first.
+    Run yolo/02_build.py first.
 """
 import os
 import sys
 
-# 允许从 upload 脚本导入 pipeline 内的模块
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "cleansight-yolo-pipeline"))
+# 本脚本位于 cleansight-yolo-pipeline/yolo/;定位 pipeline 根(取 utils/)与仓库根(取 config.py)
+from pathlib import Path
+HERE = Path(__file__).resolve()
+PIPELINE_ROOT = HERE.parents[1]          # cleansight-yolo-pipeline/
+REPO_ROOT = HERE.parents[2]              # 仓库根(config.py 所在,含密钥)
+sys.path.insert(0, str(PIPELINE_ROOT))   # → utils/
+sys.path.insert(0, str(REPO_ROOT))       # → config.py
 
 from modelscope.hub.api import HubApi
 from config import MS_ACCESS_TOKEN, MS_YOLO_REPO_ID
 from utils.check import check_dataset, print_result
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-YOLO_DATASETS_PATH = os.path.join(BASE_DIR, "cleansight-yolo-pipeline", "datasets")
-TRACKING_PATH = os.path.join(BASE_DIR, "cleansight-yolo-pipeline", "tracking.md")
+YOLO_DATASETS_PATH = str(PIPELINE_ROOT / "datasets")
+TRACKING_PATH = str(HERE.parent / "tracking.md")   # tracking.md 现随 yolo/ 数据集目录
 
 SKIP_CHECK = "--skip-check" in sys.argv
 
 if not os.path.isdir(YOLO_DATASETS_PATH):
     raise SystemExit(
         f"YOLO dataset not found at {YOLO_DATASETS_PATH}. "
-        f"Run cleansight-yolo-pipeline/02_build_dataset.py first."
+        f"Run yolo/02_build.py first."
     )
 
 # ---- 推送前校验 ----
@@ -64,7 +64,7 @@ if not SKIP_CHECK:
     if any_fail:
         raise SystemExit(
             "\n❌ 数据集校验未通过，拒绝推送。\n"
-            "   修复后重试，或 python upload_yolo_to_modelscope.py --skip-check 强制上传。"
+            "   修复后重试，或 python yolo/upload.py --skip-check 强制上传。"
         )
     print("\n✅ 校验通过，开始上传...\n")
 else:

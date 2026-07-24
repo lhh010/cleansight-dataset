@@ -89,7 +89,7 @@ def main():
     cfg = load_config()
     groups = cfg["groups"]
     if not DATASETS.exists():
-        raise SystemExit(f"未找到 {DATASETS},先跑 02_build_dataset.py")
+        raise SystemExit(f"未找到 {DATASETS},先跑 yolo/02_build.py")
     for g, class_names in groups.items():
         gdir = DATASETS / g
         if not gdir.exists():

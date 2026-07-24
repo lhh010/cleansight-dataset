@@ -10,7 +10,13 @@ import os
 # 访问令牌: https://modelscope.cn/my/myaccesstoken
 MS_ACCESS_TOKEN = "your_access_token_here"
 # 数据集仓库 ID，格式: <username>/<dataset_name>
+# 旧的通用 raw/project-10 仓库（archive/scripts/ 里的老脚本仍引用）
 MS_REPO_ID = "your_username/your_dataset_name"
+
+# 三套数据集各自的 ModelScope 仓库 ID（活跃上传器 <dataset>/upload.py 使用）
+MS_YOLO_REPO_ID = "your_username/cleansight-yolo"              # cleansight-yolo-pipeline/yolo/upload.py
+MS_ACTIONMIXED_REPO_ID = "your_username/cleansight-ActionMixed"   # cleansight-yolo-pipeline/actionmixed/upload.py
+MS_ACTIONSEQ_REPO_ID = "your_username/cleansight-ActionSequence"  # 已弃用,仅 archive/actionseq/upload.py 用
 
 # ============================================================
 # Label Studio 配置

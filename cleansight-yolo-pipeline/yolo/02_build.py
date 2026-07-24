@@ -13,8 +13,8 @@ LS 导出 JSON + 视频 -> YOLO 目标检测数据集（group1_large / group2_sm
 以自然方式增加样本量，避免旋转/缩放等人工增强带来的失真。
 
 用法（在 cleansight-yolo-pipeline/ 下执行）：
-    python3 02_build_dataset.py
-    python3 02_build_dataset.py --auto-assign
+    python3 yolo/02_build.py
+    python3 yolo/02_build.py --auto-assign
 """
 import json
 import shutil
@@ -26,6 +26,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
+
+# --- 从子目录运行时也能 import 顶层 utils/;HERE = 本数据集目录 ---
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
 
 from utils.common import ROOT, load_config, is_whitelisted
 from utils import lsexport, split as splitmod, stats
@@ -92,7 +96,7 @@ def main():
     sp = splitmod.load()
 
     # ---- 增量：加载已完成任务列表 ----
-    completed_path = ROOT / "completed_tasks.json"
+    completed_path = HERE / "completed_tasks.json"
     completed = {}
     if completed_path.exists():
         completed = json.loads(completed_path.read_text(encoding="utf-8"))
@@ -380,7 +384,7 @@ def write_tracking_table(all_tasks, task_stats, groups, only_videos, json_path):
                    "> Rotated bboxes auto-converted to AABB.",
                    "> Rare classes (< 200 keyframes) have dense neighbor-frame sampling."])
 
-    (ROOT / "tracking.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (HERE / "tracking.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

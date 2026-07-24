@@ -60,7 +60,7 @@ test  (  0 帧):  (目前暂无，待更多确认任务)
 ```
 本地:
   DATASET_STATUS.md                ← 项目根目录
-  cleansight-yolo-pipeline/tracking.md  ← 流水线自动生成
+  cleansight-yolo-pipeline/yolo/tracking.md  ← 流水线自动生成
 
 ModelScope:
   lhh010/cleansight-raw/           ← 原始 LS 导出 JSON + DATASET_STATUS.md
@@ -74,11 +74,11 @@ ModelScope:
 ## 三、流水线设计
 
 ```
-00_status.py         对账：导出/磁盘/白名单/split 四方对齐
-01_pull_data.py      拉取原始视频
-02_build_dataset.py  核心：旋转框 AABB 修正 → 阶段分割 → 抽帧 → YOLO 格式输出
-03_train.py          YOLO 训练（每阶段独立模型）
-04_validate.py       验收评估（PASS/FAIL 门禁）
+common/00_status.py     对账：导出/磁盘/白名单/split 四方对齐
+common/01_pull_data.py  拉取原始视频
+yolo/02_build.py        核心：旋转框 AABB 修正 → 阶段分割 → 抽帧 → YOLO 格式输出
+yolo/03_train.py        YOLO 训练（每阶段独立模型）
+yolo/04_validate.py     验收评估（PASS/FAIL 门禁）
 ```
 
 ## 四、关键设计决策

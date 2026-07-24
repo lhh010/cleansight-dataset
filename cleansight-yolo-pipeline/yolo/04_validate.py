@@ -5,11 +5,15 @@
 
 需 torch + ultralytics —— 用本项目 .venv/bin/python(见 requirements.txt)。
 
-用法(在 yolo_pipeline/ 下执行):
-    <py> 04_validate.py                # 全部有权重的组
-    <py> 04_validate.py group2_small   # 只验某组
+用法(在 cleansight-yolo-pipeline/ 下执行):
+    <py> yolo/04_validate.py                # 全部有权重的组
+    <py> yolo/04_validate.py group2_small   # 只验某组
 """
 import sys
+
+# --- 从子目录运行时也能 import 顶层 utils/ ---
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import ROOT, load_config
 
@@ -26,7 +30,7 @@ def evaluate(group, thr):
     if not weight.exists():
         return None, None, None, [f"缺权重 {weight},先跑 03_train.py"]
     if not data.exists():
-        return None, None, None, [f"缺 data.yaml {data},先跑 02_build_dataset.py"]
+        return None, None, None, [f"缺 data.yaml {data},先跑 yolo/02_build.py"]
 
     model = YOLO(str(weight))
     m = model.val(data=str(data), split="val", verbose=False,
