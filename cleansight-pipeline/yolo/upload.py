@@ -1,6 +1,6 @@
 """Upload YOLO detection dataset to ModelScope at lhh010/cleansight-yolo.
 
-Uploads each group dir under cleansight-yolo-pipeline/datasets/ (images, labels,
+Uploads each group dir under cleansight-pipeline/datasets/ (images, labels,
 data.yaml). Also uploads yolo/tracking.md to the repo root.
 
   lhh010/cleansight-yolo/
@@ -12,20 +12,20 @@ data.yaml). Also uploads yolo/tracking.md to the repo root.
     group2_small/
       ...
 
-Usage (在 cleansight-yolo-pipeline/ 下执行):
+Usage (在 cleansight-pipeline/ 下执行):
     python yolo/upload.py              # 上传前自动校验
     python yolo/upload.py --skip-check # 跳过校验直接上传
 
 Prerequisite:
-    Run yolo/02_build.py first.
+    Run yolo/build.py first.
 """
 import os
 import sys
 
-# 本脚本位于 cleansight-yolo-pipeline/yolo/;定位 pipeline 根(取 utils/)与仓库根(取 config.py)
+# 本脚本位于 cleansight-pipeline/yolo/;定位 pipeline 根(取 utils/)与仓库根(取 config.py)
 from pathlib import Path
 HERE = Path(__file__).resolve()
-PIPELINE_ROOT = HERE.parents[1]          # cleansight-yolo-pipeline/
+PIPELINE_ROOT = HERE.parents[1]          # cleansight-pipeline/
 REPO_ROOT = HERE.parents[2]              # 仓库根(config.py 所在,含密钥)
 sys.path.insert(0, str(PIPELINE_ROOT))   # → utils/
 sys.path.insert(0, str(REPO_ROOT))       # → config.py
@@ -42,13 +42,13 @@ SKIP_CHECK = "--skip-check" in sys.argv
 if not os.path.isdir(YOLO_DATASETS_PATH):
     raise SystemExit(
         f"YOLO dataset not found at {YOLO_DATASETS_PATH}. "
-        f"Run yolo/02_build.py first."
+        f"Run yolo/build.py first."
     )
 
 # ---- 推送前校验 ----
 if not SKIP_CHECK:
     print("=" * 60)
-    print("  推送前校验 (05_check)")
+    print("  推送前校验 (check)")
     print("=" * 60)
     any_fail = False
     for group_name in sorted(os.listdir(YOLO_DATASETS_PATH)):

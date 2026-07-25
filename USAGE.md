@@ -22,51 +22,51 @@
 
 ```
 dataset/
-├── config.py                          # ModelScope / Label Studio 密钥（不入 git）
-├── config.example.py                  # 密钥模板
-├── DATASET_STATUS.md                  # 数据集状态追踪表
-├── SUMMARY.md                         # 数据集与模型设计总结
+├── config.py          # ModelScope / Label Studio 密钥（不入 git）
+├── config.example.py  # 密钥模板
+├── DATASET_STATUS.md  # 数据集状态追踪表
+├── SUMMARY.md         # 数据集与模型设计总结
 │
-└── cleansight-yolo-pipeline/          # ← 所有操作在此目录下执行
-    ├── config.yaml                    # 中央配置（groups, only_videos, stride...）
-    ├── splits.yaml                    # Split 分配唯一真源
-    ├── requirements.txt               # 依赖清单
+└── cleansight-pipeline/  # ← 所有操作在此目录下执行
+    ├── config.yaml       # 中央配置（groups, only_videos, stride...）
+    ├── splits.yaml       # Split 分配唯一真源
+    ├── requirements.txt  # 依赖清单
     │
-    ├── common/                        # 共享编排脚本
-    │   ├── 00_status.py               # 对账：导出/磁盘/白名单/split 四方对齐
-    │   ├── 01_pull_data.py            # 下载 LS 视频到 raw/videos/
-    │   ├── 05_check.py                # 数据集校验
-    │   ├── count_classes.py           # 类别计数
-    │   ├── parse_tasks.py             # 解析任务
-    │   ├── build_checklist.py         # 生成检查清单
-    │   └── upload_all.py              # 统一 git 上传
+    ├── common/                  # 共享编排脚本
+    │   ├── reconcile.py         # 对账：导出/磁盘/白名单/split 四方对齐
+    │   ├── pull.py              # 下载 LS 视频到 raw/videos/
+    │   ├── check.py             # 数据集校验
+    │   ├── count_classes.py     # 类别计数
+    │   ├── scarce_sources.py    # 解析任务
+    │   ├── scarce_checklist.py  # 生成检查清单
+    │   └── upload_git.py        # 统一 git 上传
     │
-    ├── yolo/                          # YOLO 检测数据集
-    │   ├── 02_build.py                # 构建 group1_large / group2_small YOLO 数据集
-    │   ├── 02b_augment.py             # 稀有类别数据增强（备用）
-    │   ├── 03_train.py                # YOLO 训练
-    │   ├── 04_validate.py             # 验收评估
-    │   ├── upload.py                  # 上传 group 数据集 → cleansight-yolo
-    │   ├── completed_tasks.json       # 增量构建记录（自动生成）
-    │   └── tracking.md                # 追踪表（自动生成）
+    ├── yolo/                     # YOLO 检测数据集
+    │   ├── build.py              # 构建 group1_large / group2_small YOLO 数据集
+    │   ├── augment.py            # 稀有类别数据增强（备用）
+    │   ├── train.py              # YOLO 训练
+    │   ├── validate.py           # 验收评估
+    │   ├── upload.py             # 上传 group 数据集 → cleansight-yolo
+    │   ├── completed_tasks.json  # 增量构建记录（自动生成）
+    │   └── tracking.md           # 追踪表（自动生成）
     │
-    ├── actionmixed/                   # ActionMixed 混合数据集
-    │   ├── 02_build.py                # 构建 ActionMixed 数据集
-    │   ├── upload.py                  # 上传混合数据集
+    ├── actionmixed/                          # ActionMixed 混合数据集
+    │   ├── build.py                          # 构建 ActionMixed 数据集
+    │   ├── upload.py                         # 上传混合数据集
     │   ├── completed_tasks_actionmixed.json  # 增量构建记录（自动生成）
-    │   └── tracking_actionmixed.md    # 追踪表（自动生成）
+    │   └── tracking_actionmixed.md           # 追踪表（自动生成）
     │
-    ├── utils/                         # 共享库
-    │   ├── lsexport.py                # LS 导出 JSON 解析（旋转AABB、阶段提取）
-    │   ├── split.py                   # 确定性切分
-    │   ├── stats.py                   # 样本分布统计
-    │   └── common.py                  # 公共工具
+    ├── utils/              # 共享库
+    │   ├── labelstudio.py  # LS 导出 JSON 解析（旋转AABB、阶段提取）
+    │   ├── split.py        # 确定性切分
+    │   ├── stats.py        # 样本分布统计
+    │   └── common.py       # 公共工具
     │
     ├── raw/
-    │   ├── exports/                   # LS 导出 JSON
-    │   └── videos/                    # 下载的视频
-    ├── datasets/                      # group 数据集输出
-    └── datasets_actionmixed/          # 混合数据集输出
+    │   ├── exports/           # LS 导出 JSON
+    │   └── videos/            # 下载的视频
+    ├── datasets/              # group 数据集输出
+    └── datasets_actionmixed/  # 混合数据集输出
 
 （原根目录的 upload_to_modelscope.py 上传 raw 数据脚本已归档至 archive/scripts/）
 ```
@@ -76,7 +76,7 @@ dataset/
 ## 二、环境准备
 
 ```bash
-cd cleansight-yolo-pipeline
+cd cleansight-pipeline
 pip install opencv-python-headless numpy pyyaml pillow ultralytics modelscope
 
 # 如果训练/验证，还需 ultralytics（自动安装 PyTorch）
@@ -120,19 +120,19 @@ pip install opencv-python-headless numpy pyyaml pillow ultralytics modelscope
 ### 从零构建
 
 ```bash
-cd cleansight-yolo-pipeline
+cd cleansight-pipeline
 
 # 1. 下载 LS 导出 JSON → raw/exports/
 #    或从 LS 服务器拉取：
 export LS_HOST=http://<LS地址>:8080  LS_TOKEN=<AccessToken>
-python common/01_pull_data.py
+python common/pull.py
 
 # 2. 对账 & 分配 split
-python common/00_status.py        # 查看状态
-python common/00_status.py --assign  # 确定性回填 split
+python common/reconcile.py        # 查看状态
+python common/reconcile.py --assign  # 确定性回填 split
 
 # 3. 构建数据集
-python yolo/02_build.py           # group 数据集 → datasets/
+python yolo/build.py           # group 数据集 → datasets/
 
 # 4. 上传
 python yolo/upload.py             # cleansight-yolo
@@ -148,12 +148,12 @@ python yolo/upload.py             # cleansight-yolo
 ### 步骤 1：重新导出 LS 数据
 
 在 LS 网页端重新导出 Project #10 的 JSON，放入：
-- `cleansight-yolo-pipeline/raw/exports/`
+- `cleansight-pipeline/raw/exports/`
 - `raw-from Label Studio/`
 
 ### 步骤 2：加入白名单
 
-编辑 `cleansight-yolo-pipeline/config.yaml`，在 `only_videos` 末尾追加：
+编辑 `cleansight-pipeline/config.yaml`，在 `only_videos` 末尾追加：
 
 ```yaml
 only_videos:
@@ -166,24 +166,24 @@ only_videos:
 ### 步骤 3：下载视频 & 分配 split
 
 ```bash
-cd cleansight-yolo-pipeline
+cd cleansight-pipeline
 
 # 下载新视频
 export LS_HOST=... LS_TOKEN=...
-python common/01_pull_data.py
+python common/pull.py
 
 # 分配 split
-python common/00_status.py --assign
+python common/reconcile.py --assign
 ```
 
 ### 步骤 4：增量构建
 
 ```bash
 # 增量模式：只处理新任务，已有任务秒级跳过
-python yolo/02_build.py
+python yolo/build.py
 ```
 
-> 如需全量重建：`python yolo/02_build.py --force`
+> 如需全量重建：`python yolo/build.py --force`
 
 ### 步骤 5：增量上传
 
@@ -200,8 +200,8 @@ python yolo/upload.py
 ### 查看数据集状态
 
 ```bash
-cd cleansight-yolo-pipeline
-python common/00_status.py
+cd cleansight-pipeline
+python common/reconcile.py
 ```
 
 ### 查看样本分布
@@ -221,7 +221,7 @@ python -c "from utils import stats; stats.main()"
 
 编辑 `config.yaml` 的 `stride` 值，然后 `--force` 重建：
 ```bash
-python yolo/02_build.py --force
+python yolo/build.py --force
 ```
 
 ### 调整稀有类别阈值
@@ -276,12 +276,12 @@ assignments:
 
 | 脚本 | 用途 | 常用参数 |
 |------|------|---------|
-| `common/00_status.py` | 四方对账 | `--assign` 回填 split |
-| `common/01_pull_data.py` | 下载 LS 视频 | 需要 `LS_HOST` + `LS_TOKEN` 环境变量 |
-| `yolo/02_build.py` | 构建 group 数据集 | `--auto-assign` `--force` |
-| `yolo/02b_augment.py` | 旋转/缩放增强（备用） | `--threshold=150 --copies=3 --dry-run` |
-| `yolo/03_train.py` | YOLO 训练 | `yolo/03_train.py group2_small` |
-| `yolo/04_validate.py` | 验收评估 | 输出 PASS/FAIL |
+| `common/reconcile.py` | 四方对账 | `--assign` 回填 split |
+| `common/pull.py` | 下载 LS 视频 | 需要 `LS_HOST` + `LS_TOKEN` 环境变量 |
+| `yolo/build.py` | 构建 group 数据集 | `--auto-assign` `--force` |
+| `yolo/augment.py` | 旋转/缩放增强（备用） | `--threshold=150 --copies=3 --dry-run` |
+| `yolo/train.py` | YOLO 训练 | `yolo/train.py group2_small` |
+| `yolo/validate.py` | 验收评估 | 输出 PASS/FAIL |
 | `yolo/upload.py` | 上传 group 数据集 | — |
 
 ---
@@ -293,7 +293,7 @@ assignments:
 ```
 yolo/completed_tasks.json     ← 记录已处理任务的版本信息
     ↓
-yolo/02_build.py 读取
+yolo/build.py 读取
     ↓
 跳过 export + stride 未变的任务
     ↓
@@ -305,13 +305,13 @@ yolo/02_build.py 读取
 ### 强制全量重建
 
 ```bash
-python yolo/02_build.py --force
+python yolo/build.py --force
 ```
 
 以下情况需要 `--force`：
 - 改了 `stride`、`jpg_quality`
 - 改了 `config.yaml` 的 `groups`（增删类别）
-- 修复了 `lsexport.py` 的核心逻辑（如旋转 AABB）
+- 修复了 `labelstudio.py` 的核心逻辑（如旋转 AABB）
 - 换了新的 LS 导出 JSON
 
 ### 追踪文件
@@ -319,8 +319,8 @@ python yolo/02_build.py --force
 | 文件 | 内容 | 位置 |
 |------|------|------|
 | `DATASET_STATUS.md` | 数据集状态表 | 项目根目录 + ModelScope |
-| `tracking.md` | 构建追踪表（自动生成） | `cleansight-yolo-pipeline/yolo/` |
-| `completed_tasks.json` | 增量构建记录 | `cleansight-yolo-pipeline/yolo/` |
+| `tracking.md` | 构建追踪表（自动生成） | `cleansight-pipeline/yolo/` |
+| `completed_tasks.json` | 增量构建记录 | `cleansight-pipeline/yolo/` |
 
 ---
 

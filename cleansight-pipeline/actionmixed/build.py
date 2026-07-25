@@ -15,9 +15,9 @@ before and after (up to half the segment length, constrained by video bounds and
 adjacent-segment midpoints). All sampled frames in extended ranges are included.
 
 Usage:
-    python3 actionmixed/02_build.py
-    python3 actionmixed/02_build.py --auto-assign
-    python3 actionmixed/02_build.py --force
+    python3 actionmixed/build.py
+    python3 actionmixed/build.py --auto-assign
+    python3 actionmixed/build.py --force
 """
 import json
 import sys
@@ -33,7 +33,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 from utils.common import ROOT, load_config, is_whitelisted
-from utils import lsexport, split as splitmod
+from utils import labelstudio, split as splitmod
 
 OUT_ROOT = ROOT / "datasets_actionmixed"
 
@@ -204,8 +204,8 @@ def main():
     # Detection class mapping
     det_label2cid = {lab: i for i, lab in enumerate(UNIFIED_CLASSES)}
 
-    json_path = lsexport.latest_export()
-    tasks = lsexport.load_tasks(json_path)
+    json_path = labelstudio.latest_export()
+    tasks = labelstudio.load_tasks(json_path)
 
     # ---- Load completed tasks for incremental processing ----
     completed = {}
@@ -220,10 +220,10 @@ def main():
     # ---- Discover action classes across all confirmed tasks ----
     all_phases = set()
     for task in tasks:
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name or not is_whitelisted(name, only):
             continue
-        for _, _, phase in lsexport.iter_phase_ranges(task):
+        for _, _, phase in labelstudio.iter_phase_ranges(task):
             all_phases.add(phase)
 
     # Build action class list: 0 = idle, then sorted discovered phases
@@ -234,10 +234,10 @@ def main():
     # ---- Compute rare detection classes ----
     kf_counts = defaultdict(int)
     for task in tasks:
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name or not is_whitelisted(name, only):
             continue
-        for r in lsexport.iter_results(task, "videorectangle"):
+        for r in labelstudio.iter_results(task, "videorectangle"):
             labs = r.get("value", {}).get("labels", [])
             if not labs or labs[0] not in det_label2cid:
                 continue
@@ -255,10 +255,10 @@ def main():
     pending_tasks = []
 
     for ti, task in enumerate(tasks):
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name or not is_whitelisted(name, only):
             continue
-        phases = list(lsexport.iter_phase_ranges(task))
+        phases = list(labelstudio.iter_phase_ranges(task))
         if not phases:
             continue
 
@@ -287,16 +287,16 @@ def main():
     # Count total segments first to decide small/large mode.
     all_segments_pre = []  # (ti, task, name, seg_idx, seg_info)
     for ti, task, name in pending_tasks:
-        vpath = lsexport.VIDEO_DIR / name
+        vpath = labelstudio.VIDEO_DIR / name
         if not vpath.exists():
             continue
         cap = cv2.VideoCapture(str(vpath))
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         cap.release()
-        phase_ranges_ls = list(lsexport.iter_phase_ranges(task))
-        fc, dur = lsexport.clip_meta(task)
+        phase_ranges_ls = list(labelstudio.iter_phase_ranges(task))
+        fc, dur = labelstudio.clip_meta(task)
         real_fps_tmp = 30.0  # placeholder, will be read properly in processing
-        scale_tmp, _ = lsexport.fps_scale(real_fps_tmp, fc, dur)
+        scale_tmp, _ = labelstudio.fps_scale(real_fps_tmp, fc, dur)
         phase_ranges_real = []
         for start_ls, end_ls, phase in phase_ranges_ls:
             start_real = max(1, int(round(start_ls / scale_tmp)))
@@ -345,19 +345,19 @@ def main():
     for ti, task, name in pending_tasks:
         tid = task["id"]
 
-        vpath = lsexport.VIDEO_DIR / name
+        vpath = labelstudio.VIDEO_DIR / name
         if not vpath.exists():
             print(f"  [warn] task#{tid} video missing: {name}")
             continue
 
-        tracks = lsexport.collect_tracks_unified(task, det_label2cid)
-        phase_ranges_ls = list(lsexport.iter_phase_ranges(task))
+        tracks = labelstudio.collect_tracks_unified(task, det_label2cid)
+        phase_ranges_ls = list(labelstudio.iter_phase_ranges(task))
 
         cap = cv2.VideoCapture(str(vpath))
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         real_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
-        fc, dur = lsexport.clip_meta(task)
-        scale, ls_fps = lsexport.fps_scale(real_fps, fc, dur)
+        fc, dur = labelstudio.clip_meta(task)
+        scale, ls_fps = labelstudio.fps_scale(real_fps, fc, dur)
 
         # Convert LS phase ranges to real-frame space
         phase_ranges_real = []
@@ -371,7 +371,7 @@ def main():
         segments = compute_extended_segments(phase_ranges_real, total)
 
         task_phases = sorted(set(ph for _, _, ph in phase_ranges_ls))
-        det_labels = lsexport.collect_det_labels(task)
+        det_labels = labelstudio.collect_det_labels(task)
 
         seg_desc = ", ".join(
             f"{ph}[{ns}-{ne}]" for ns, ne, ph, _, _ in segments
@@ -417,10 +417,10 @@ def main():
             lines = []
             has_rare = False
             for cid, segs in tracks:
-                box = lsexport.box_at(segs, ls_frame)
+                box = labelstudio.box_at(segs, ls_frame)
                 if box is None:
                     continue
-                cx, cy, w, h = lsexport.to_yolo(*box)
+                cx, cy, w, h = labelstudio.to_yolo(*box)
                 if w <= 0 or h <= 0:
                     continue
                 lines.append(f"{cid} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
@@ -466,10 +466,10 @@ def main():
                 ls_frame = df_idx * scale
                 lines = []
                 for cid, segs in tracks:
-                    box = lsexport.box_at(segs, ls_frame)
+                    box = labelstudio.box_at(segs, ls_frame)
                     if box is None:
                         continue
-                    cx, cy, w, h = lsexport.to_yolo(*box)
+                    cx, cy, w, h = labelstudio.to_yolo(*box)
                     if w <= 0 or h <= 0:
                         continue
                     lines.append(f"{cid} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
@@ -610,7 +610,7 @@ def generate_tracking(task_stats, all_tasks, json_path, only_videos, action_name
 
     for task in all_tasks:
         tid = task["id"]
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name:
             continue
         if only_videos and not is_whitelisted(name, only_videos):
@@ -629,7 +629,7 @@ def generate_tracking(task_stats, all_tasks, json_path, only_videos, action_name
             )
         else:
             phases = sorted(set(
-                ph for _, _, ph in lsexport.iter_phase_ranges(task)
+                ph for _, _, ph in labelstudio.iter_phase_ranges(task)
             ))
             lines.append(
                 f"| {tid} | {name.rsplit('.', 1)[0][:30]} | "

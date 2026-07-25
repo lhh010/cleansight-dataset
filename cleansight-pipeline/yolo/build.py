@@ -12,9 +12,9 @@ LS 导出 JSON + 视频 -> YOLO 目标检测数据集（group1_large / group2_sm
 对稀有类别（框数 < rare_threshold）在正常 stride 之外额外密集采样相邻帧，
 以自然方式增加样本量，避免旋转/缩放等人工增强带来的失真。
 
-用法（在 cleansight-yolo-pipeline/ 下执行）：
-    python3 yolo/02_build.py
-    python3 yolo/02_build.py --auto-assign
+用法（在 cleansight-pipeline/ 下执行）：
+    python3 yolo/build.py
+    python3 yolo/build.py --auto-assign
 """
 import json
 import shutil
@@ -32,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 from utils.common import ROOT, load_config, is_whitelisted
-from utils import lsexport, split as splitmod, stats
+from utils import labelstudio, split as splitmod, stats
 
 OUT_ROOT = ROOT / "datasets"
 
@@ -67,10 +67,10 @@ def compute_rare_classes(tasks, label2group, only, threshold):
     """统计所有确认任务中各 label 的 keyframe 总数，返回 {label: True if rare}。"""
     kf_counts = defaultdict(int)
     for task in tasks:
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name or not is_whitelisted(name, only):
             continue
-        for r in lsexport.iter_results(task, "videorectangle"):
+        for r in labelstudio.iter_results(task, "videorectangle"):
             labs = r.get("value", {}).get("labels", [])
             if not labs or labs[0] not in label2group:
                 continue
@@ -85,14 +85,14 @@ def main():
     cfg = load_config()
     groups = cfg["groups"]
     only = cfg.get("only_videos") or []
-    label2group = lsexport.build_label_index(groups)
+    label2group = labelstudio.build_label_index(groups)
     stride = cfg.get("stride", 4)
     jpg_q = cfg.get("jpg_quality", 90)
     dense_enabled = cfg.get("rare_dense_sampling", True)
     rare_threshold = cfg.get("rare_threshold", 200)
 
-    json_path = lsexport.latest_export()
-    tasks = lsexport.load_tasks(json_path)
+    json_path = labelstudio.latest_export()
+    tasks = labelstudio.load_tasks(json_path)
     sp = splitmod.load()
 
     # ---- 增量：加载已完成任务列表 ----
@@ -127,10 +127,10 @@ def main():
     pending = []
     unassigned = []
     for ti, task in enumerate(tasks):
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name or not is_whitelisted(name, only):
             continue
-        if not lsexport.collect_tracks(task, label2group):
+        if not labelstudio.collect_tracks(task, label2group):
             continue
         tid = task["id"]
         stem = splitmod.stem_of(name)
@@ -185,21 +185,21 @@ def main():
         if split not in splitmod.DATASET_SPLITS:
             print(f"  [hold] task#{tid} {name} split={split}")
             continue
-        vpath = lsexport.VIDEO_DIR / name
+        vpath = labelstudio.VIDEO_DIR / name
         if not vpath.exists():
             print(f"  [warn] task#{tid} video missing: {name}")
             continue
 
-        tracks = lsexport.collect_tracks(task, label2group)
-        task_phases = lsexport.collect_task_phases(task)
-        det_labels = lsexport.collect_det_labels(task)
+        tracks = labelstudio.collect_tracks(task, label2group)
+        task_phases = labelstudio.collect_task_phases(task)
+        det_labels = labelstudio.collect_det_labels(task)
         stem12 = vpath.stem[:12]
 
         cap = cv2.VideoCapture(str(vpath))
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         real_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
-        fc, dur = lsexport.clip_meta(task)
-        scale, ls_fps = lsexport.fps_scale(real_fps, fc, dur)
+        fc, dur = labelstudio.clip_meta(task)
+        scale, ls_fps = labelstudio.fps_scale(real_fps, fc, dur)
         print(f"  task#{tid} [{split}] {name}  real={total}@{real_fps:.1f}fps  "
               f"tracks={len(tracks)}  stride={stride}")
 
@@ -220,10 +220,10 @@ def main():
             lines_by_group = defaultdict(list)
             has_rare = defaultdict(bool)
             for g, cid, segs in tracks:
-                box = lsexport.box_at(segs, ls_frame)
+                box = labelstudio.box_at(segs, ls_frame)
                 if box is None:
                     continue
-                cx, cy, w, h = lsexport.to_yolo(*box)
+                cx, cy, w, h = labelstudio.to_yolo(*box)
                 if w <= 0 or h <= 0:
                     continue
                 lines_by_group[g].append(f"{cid} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
@@ -268,10 +268,10 @@ def main():
 
                 lines_by_group = defaultdict(list)
                 for g, cid, segs in tracks:
-                    box = lsexport.box_at(segs, ls_frame)
+                    box = labelstudio.box_at(segs, ls_frame)
                     if box is None:
                         continue
-                    cx, cy, w, h = lsexport.to_yolo(*box)
+                    cx, cy, w, h = labelstudio.to_yolo(*box)
                     if w <= 0 or h <= 0:
                         continue
                     lines_by_group[g].append(f"{cid} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
@@ -323,14 +323,14 @@ def main():
     print(f"\nTotal images: {emitted}")
 
     write_tracking_table(tasks, task_stats, groups, only, json_path)
-    print("tracking.md generated. Next: 03_train.py / 04_validate.py")
+    print("tracking.md generated. Next: train.py / validate.py")
 
 
 # ----- tracking.md -----
 def write_tracking_table(all_tasks, task_stats, groups, only_videos, json_path):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     stats_by_id = {s["id"]: s for s in task_stats}
-    label2group = lsexport.build_label_index(groups)
+    label2group = labelstudio.build_label_index(groups)
 
     lines = [
         "# CleanSight Dataset Status", "",
@@ -341,7 +341,7 @@ def write_tracking_table(all_tasks, task_stats, groups, only_videos, json_path):
     ]
     for task in all_tasks:
         tid = task["id"]
-        name = lsexport.task_video_name(task)
+        name = labelstudio.task_video_name(task)
         if not name:
             continue
         st = stats_by_id.get(tid)
@@ -352,8 +352,8 @@ def write_tracking_table(all_tasks, task_stats, groups, only_videos, json_path):
             tf = sum(st["group_frame_counts"].values())
             lines.append(f"| {tid} | {name.rsplit('.',1)[0][:35]} | [OK] | {sp} | {phases_str} | {det} | {tf} |")
         else:
-            phases_str = ", ".join(lsexport.collect_task_phases(task)) or "—"
-            det = len(lsexport.collect_det_labels(task))
+            phases_str = ", ".join(labelstudio.collect_task_phases(task)) or "—"
+            det = len(labelstudio.collect_det_labels(task))
             lines.append(f"| {tid} | {name.rsplit('.',1)[0][:35]} | [NO] | — | {phases_str} | {det} | — |")
 
     lines.extend(["", "## Group Summary", "",

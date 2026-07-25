@@ -8,11 +8,11 @@
   - 随机水平翻转（可选，默认关闭——内镜场景左右有意义）
   - 每帧默认生成 3 个增强副本（可配置）
 
-用法（在 cleansight-yolo-pipeline/ 下执行）：
-    python3 yolo/02b_augment.py
-    python3 yolo/02b_augment.py --dry-run        # 只统计，不生成
-    python3 yolo/02b_augment.py --threshold 30   # 自定义稀有阈值（默认 50 框）
-    python3 yolo/02b_augment.py --copies 5       # 每帧增强副本数（默认 3）
+用法（在 cleansight-pipeline/ 下执行）：
+    python3 yolo/augment.py
+    python3 yolo/augment.py --dry-run        # 只统计，不生成
+    python3 yolo/augment.py --threshold 30   # 自定义稀有阈值（默认 50 框）
+    python3 yolo/augment.py --copies 5       # 每帧增强副本数（默认 3）
 """
 import math
 import random
@@ -275,7 +275,7 @@ def main():
 
     if not dry_run:
         print(f"\n总共生成 {total_augmented} 张增强图像。")
-        print("下一步:03_train.py / 04_validate.py")
+        print("下一步:train.py / validate.py")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 """
 数据集校验核心逻辑 —— 纯数据级，不依赖训练权重 / GPU。
 
-供 05_check.py (CLI) 和 upload 脚本导入使用。
+供 check.py (CLI) 和 upload 脚本导入使用。
 
 校验项:
   1. 结构完整性 — data.yaml、images/labels 一一对应、0 字节文件

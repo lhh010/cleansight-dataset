@@ -9,15 +9,15 @@
   - config.only_videos —— 已人工质检合格(白名单)
 
 输出一张状态表 + 可执行分类:
-  未下载  导出引用了但磁盘没有        -> 跑 01_pull_data.py
+  未下载  导出引用了但磁盘没有        -> 跑 pull.py
   孤儿    磁盘有但导出没引用          -> 陈旧下载,可清理
   未质检  已下载但不在白名单          -> 人工质检后追加 config.only_videos
   未归属  已质检但 splits.yaml 没分配 -> 跑本脚本 --assign 回填
   遗失    splits.yaml 有但磁盘没有    -> 悬挂项,重下或从 splits.yaml 删(不自动删)
 
-用法(在 cleansight-yolo-pipeline/ 下执行):
-  python3 common/00_status.py            # 只读,打印状态
-  python3 common/00_status.py --assign   # 给"未归属"确定性回填 split 并写回 splits.yaml
+用法(在 cleansight-pipeline/ 下执行):
+  python3 common/reconcile.py            # 只读,打印状态
+  python3 common/reconcile.py --assign   # 给"未归属"确定性回填 split 并写回 splits.yaml
 """
 import sys
 
@@ -26,16 +26,16 @@ import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import load_config, is_whitelisted
-from utils import lsexport, split as splitmod
+from utils import labelstudio, split as splitmod
 
 
 def gather():
     cfg = load_config()
     only = cfg.get("only_videos") or []
-    label2group = lsexport.build_label_index(cfg["groups"])
+    label2group = labelstudio.build_label_index(cfg["groups"])
 
-    json_path = lsexport.latest_export()
-    tasks = lsexport.load_tasks(json_path)
+    json_path = labelstudio.latest_export()
+    tasks = labelstudio.load_tasks(json_path)
     sp = splitmod.load()
     assignments = sp.get("assignments", {})
 
@@ -50,18 +50,18 @@ def gather():
 
     # 导出侧
     for t in tasks:
-        name = lsexport.task_video_name(t)
+        name = labelstudio.task_video_name(t)
         if not name:
             continue
         r = row(splitmod.stem_of(name))
         r["name"] = name
         r["in_export"] = True
         r["whitelisted"] = is_whitelisted(name, only)
-        if lsexport.collect_tracks(t, label2group):
+        if labelstudio.collect_tracks(t, label2group):
             r["has_det"] = True
 
     # 磁盘侧
-    for f in sorted(lsexport.VIDEO_DIR.glob("*.mp4")):
+    for f in sorted(labelstudio.VIDEO_DIR.glob("*.mp4")):
         r = row(splitmod.stem_of(f.name))
         r["name"] = f.name
         r["on_disk"] = True
@@ -104,10 +104,10 @@ def print_table(rows):
 
 def print_cats(cats):
     hints = {
-        "未下载": "跑 01_pull_data.py",
+        "未下载": "跑 pull.py",
         "孤儿": "陈旧下载,可清理",
         "未质检": "人工质检后追加 config.yaml 的 only_videos",
-        "未归属": "跑 00_status.py --assign 回填",
+        "未归属": "跑 reconcile.py --assign 回填",
         "遗失": "重下,或从 splits.yaml 删除(不自动删)",
     }
     print("\n=== 待办分类 ===")
@@ -127,7 +127,7 @@ def print_cats(cats):
 def main():
     do_assign = "--assign" in sys.argv[1:]
     cfg, json_path, sp, rows = gather()
-    print(f"导出: {json_path.name}   视频目录: {lsexport.VIDEO_DIR}")
+    print(f"导出: {json_path.name}   视频目录: {labelstudio.VIDEO_DIR}")
     print_table(rows)
     cats = classify(rows)
     print_cats(cats)

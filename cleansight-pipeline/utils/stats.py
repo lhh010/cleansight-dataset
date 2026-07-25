@@ -7,7 +7,7 @@
 
   - 帧数 = label 文件数(一帧一文件);框数 = 所有文件的行数之和;class_id = 每行首列。
   - 逐类给出 train/val 帧数、框数与 val 帧占比,并对空 split / 某类 val 无样本给出提示
-    (与 04_validate 的验收口径呼应)。
+    (与 validate 的验收口径呼应)。
 
 独立重算:
     python3 -c "from utils import stats; stats.main()"
@@ -89,7 +89,7 @@ def main():
     cfg = load_config()
     groups = cfg["groups"]
     if not DATASETS.exists():
-        raise SystemExit(f"未找到 {DATASETS},先跑 yolo/02_build.py")
+        raise SystemExit(f"未找到 {DATASETS},先跑 yolo/build.py")
     for g, class_names in groups.items():
         gdir = DATASETS / g
         if not gdir.exists():

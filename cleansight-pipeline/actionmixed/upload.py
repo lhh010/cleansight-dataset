@@ -7,16 +7,16 @@ Uploads:
   - datasets_actionmixed/README.md (if exists)
   - tracking_actionmixed.md
 
-Usage (在 cleansight-yolo-pipeline/ 下执行):
+Usage (在 cleansight-pipeline/ 下执行):
     python actionmixed/upload.py
 """
 import os
 import sys
 
-# 本脚本位于 cleansight-yolo-pipeline/actionmixed/;定位 pipeline 根(取 utils/)与仓库根(取 config.py)
+# 本脚本位于 cleansight-pipeline/actionmixed/;定位 pipeline 根(取 utils/)与仓库根(取 config.py)
 from pathlib import Path
 HERE = Path(__file__).resolve()
-PIPELINE_ROOT = HERE.parents[1]          # cleansight-yolo-pipeline/
+PIPELINE_ROOT = HERE.parents[1]          # cleansight-pipeline/
 REPO_ROOT = HERE.parents[2]              # 仓库根(config.py 所在,含密钥)
 sys.path.insert(0, str(PIPELINE_ROOT))   # → utils/
 sys.path.insert(0, str(REPO_ROOT))       # → config.py
@@ -29,7 +29,7 @@ DATASETS_PATH = str(PIPELINE_ROOT / "datasets_actionmixed")
 if not os.path.isdir(DATASETS_PATH):
     raise SystemExit(
         f"ActionMixed dataset not found at {DATASETS_PATH}. "
-        f"Run actionmixed/02_build.py first."
+        f"Run actionmixed/build.py first."
     )
 
 api = HubApi()

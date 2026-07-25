@@ -3,11 +3,11 @@
 推送前数据集校验卡口 —— CLI 入口（核心逻辑见 utils/check.py）。
 
 用法:
-    python3 common/05_check.py                          # 校验所有已构建的数据集
-    python3 common/05_check.py --group group1_large     # 只校验指定 group
-    python3 common/05_check.py --json                   # JSON 格式输出（供 CI 消费）
-    python3 common/05_check.py --no-images              # 跳过图像解码抽查（加速）
-    python3 common/05_check.py --strict                 # 警告也按失败处理
+    python3 common/check.py                          # 校验所有已构建的数据集
+    python3 common/check.py --group group1_large     # 只校验指定 group
+    python3 common/check.py --json                   # JSON 格式输出（供 CI 消费）
+    python3 common/check.py --no-images              # 跳过图像解码抽查（加速）
+    python3 common/check.py --strict                 # 警告也按失败处理
 
 供 upload 脚本集成:
     from utils.check import check_dataset, CheckResult
@@ -59,7 +59,7 @@ def main(argv: Optional[list[str]] = None) -> dict[str, CheckResult]:
 
     if not check_items:
         print("未找到可校验的数据集（含 data.yaml 的子目录）。")
-        print("先跑: python3 yolo/02_build.py [--auto-assign]")
+        print("先跑: python3 yolo/build.py [--auto-assign]")
         sys.exit(1)
 
     # 执行

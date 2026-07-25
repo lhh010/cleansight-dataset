@@ -49,7 +49,7 @@ train:
   batch: 16
   patience: 20        # 连续多少 epoch 无提升则早停
 
-# 验收标准(可调)。04_validate 用它判 PASS/FAIL。
+# 验收标准(可调)。validate 用它判 PASS/FAIL。
 # 当前数据集很小,大概率 FAIL,属实——数据变多后再收紧。
 acceptance:
   overall_map50: 0.5       # 整体 mAP@0.5 下限

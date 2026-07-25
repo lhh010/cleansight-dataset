@@ -16,18 +16,18 @@
 
 ## 处理流程
 
-原始标注数据经过 **cleansight-yolo-pipeline** 标准化流水线的以下步骤处理：
+原始标注数据经过 **cleansight-pipeline** 标准化流水线的以下步骤处理：
 
-### 1. 数据拉取（common/01_pull_data.py）
+### 1. 数据拉取（common/pull.py）
 - 从 Label Studio 服务器下载导出 JSON 中引用的原始视频到本地 `raw/videos/`
 - 对每个视频做完整性校验（ffprobe 读时长/帧数）
 
-### 2. 对账与切分（common/00_status.py + splits.yaml）
+### 2. 对账与切分（common/reconcile.py + splits.yaml）
 - 对齐"导出 JSON / 本地视频 / 白名单 / 切分清单"四方数据
 - **按 Label Studio 任务粒度**分配 train/val/test（`splits.yaml` 为唯一真源）
 - **关键约束**：同一 LS 任务的所有帧全部进入同一 split，绝不跨 split，杜绝时间相邻帧泄漏
 
-### 3. 转 YOLO 格式（yolo/02_build.py）
+### 3. 转 YOLO 格式（yolo/build.py）
 - **关键帧对齐**：LS 标注帧号按标注端 fps 计算，通过 `scale = ls_fps/real_fps` 映射到真实帧号，消除漂移
 - **线性插值**：LS 只存关键帧 bbox，中间帧由相邻关键帧线性插值得到；`enabled=False` 表示目标离场
 - **抽帧采样**：`stride=12`（30fps 下约 2.5 张/秒），仅保留含分组内目标的帧（空帧丢弃）
@@ -39,7 +39,7 @@
 ```
 splits.yaml（入库，唯一真源）
     ↓
-yolo/02_build.py 读取每个视频的 split
+yolo/build.py 读取每个视频的 split
     ↓
 同一视频所有帧 → 全部进入该 split
     ↓
@@ -209,12 +209,12 @@ model.train(data="path/to/group1_large/data.yaml", epochs=100, imgsz=640)
 
 ## 更新/重新生成数据集
 
-数据集通过 `cleansight-yolo-pipeline` 流水线生成，完整工具链见项目仓库。
+数据集通过 `cleansight-pipeline` 流水线生成，完整工具链见项目仓库。
 
 ### 环境准备
 
 ```bash
-cd cleansight-yolo-pipeline
+cd cleansight-pipeline
 python -m venv .venv
 .venv/bin/pip install opencv-python-headless numpy pyyaml pillow ultralytics
 ```
@@ -225,39 +225,39 @@ python -m venv .venv
 # 1. 将 LS 导出 JSON 放入 raw/exports/
 # 2. 下载视频
 export LS_HOST=http://<LS地址>:8080 LS_TOKEN=<AccessToken>
-python common/01_pull_data.py
+python common/pull.py
 
 # 3. 对账 & 分配 split
-python common/00_status.py        # 查看状态
-python common/00_status.py --assign  # 确定性回填 split（写入 splits.yaml）
+python common/reconcile.py        # 查看状态
+python common/reconcile.py --assign  # 确定性回填 split（写入 splits.yaml）
 # 必要时手工调整 splits.yaml
 
 # 4. 生成 YOLO 数据集
-python yolo/02_build.py
+python yolo/build.py
 
 # 5. 训练 & 验证（可选）
-python yolo/03_train.py
-python yolo/04_validate.py
+python yolo/train.py
+python yolo/validate.py
 ```
 
 ### 上传到 ModelScope
 
 ```bash
-# 在 cleansight-yolo-pipeline 目录下执行
+# 在 cleansight-pipeline 目录下执行
 python yolo/upload.py
 ```
 
-上传脚本将 `cleansight-yolo-pipeline/datasets/` 下的各组分目录上传到 `lhh010/cleansight-yolo`。
+上传脚本将 `cleansight-pipeline/datasets/` 下的各组分目录上传到 `lhh010/cleansight-yolo`。
 
 ### 增量更新
 
 ```bash
 # 新导出 JSON 放入 raw/exports/
-python common/00_status.py        # 看差异
-python common/01_pull_data.py     # 补下新视频
+python common/reconcile.py        # 看差异
+python common/pull.py     # 补下新视频
 # 质检新视频后追加到 config.yaml 的 only_videos
-python common/00_status.py --assign  # 仅回填新视频，已有 split 不变
-python yolo/02_build.py           # 重建数据集
+python common/reconcile.py --assign  # 仅回填新视频，已有 split 不变
+python yolo/build.py           # 重建数据集
 python yolo/upload.py             # 更新 ModelScope
 ```
 
@@ -266,5 +266,5 @@ python yolo/upload.py             # 更新 ModelScope
 ## 相关链接
 
 - 原始数据集：[lhh010/cleansight-raw](https://www.modelscope.cn/datasets/lhh010/cleansight-raw)
-- 处理流水线：`cleansight-yolo-pipeline/`（项目仓库内）
+- 处理流水线：`cleansight-pipeline/`（项目仓库内）
 - 标注平台：Label Studio (Project #10)

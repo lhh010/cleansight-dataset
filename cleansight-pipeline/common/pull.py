@@ -5,10 +5,10 @@
 JSON 只存路径引用(data.video),视频本体在服务器。已存在且非空的文件会 [skip]。
 下载后做完整性抽查:优先 ffprobe 读时长/帧数;没有 ffprobe 时退化为"大小 > 0"。
 
-用法(在 cleansight-yolo-pipeline/ 下执行):
+用法(在 cleansight-pipeline/ 下执行):
     export LS_HOST=http://<LS地址>:8080
     export LS_TOKEN=<AccessToken>     # LS 页面 Account & Settings -> Access Token
-    python3 common/01_pull_data.py
+    python3 common/pull.py
 """
 import os
 import shutil
@@ -21,7 +21,7 @@ import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from utils.common import load_config
-from utils import lsexport
+from utils import labelstudio
 
 LS_HOST = os.environ.get("LS_HOST", "").rstrip("/")
 LS_TOKEN = os.environ.get("LS_TOKEN", "")
@@ -50,10 +50,10 @@ def main():
         sys.exit("请先设置环境变量 LS_HOST 和 LS_TOKEN(见脚本头部说明)")
 
     load_config()  # 目前不需要具体项,仅确认配置可读
-    json_path = lsexport.latest_export()
-    lsexport.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    tasks = lsexport.load_tasks(json_path)
-    print(f"导出: {json_path.name}  共 {len(tasks)} 个 task -> {lsexport.VIDEO_DIR}")
+    json_path = labelstudio.latest_export()
+    labelstudio.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    tasks = labelstudio.load_tasks(json_path)
+    print(f"导出: {json_path.name}  共 {len(tasks)} 个 task -> {labelstudio.VIDEO_DIR}")
 
     ok, skip, fail, bad = 0, 0, 0, []
     for t in tasks:
@@ -61,7 +61,7 @@ def main():
         if not rel:
             continue
         name = os.path.basename(rel)
-        out = lsexport.VIDEO_DIR / name
+        out = labelstudio.VIDEO_DIR / name
         if out.exists() and out.stat().st_size > 0:
             print(f"  [skip] {name} 已存在")
             skip += 1
@@ -87,7 +87,7 @@ def main():
         print(f"⚠️ 疑似损坏 {len(bad)} 个,建议删掉重下: {', '.join(bad)}")
     if fail:
         print("失败多半是 LS_HOST/LS_TOKEN 不对,或视频接的是云存储(去云端原始位置取)")
-    print("下一步:python3 common/00_status.py 看增量待办")
+    print("下一步:python3 common/reconcile.py 看增量待办")
 
 
 if __name__ == "__main__":

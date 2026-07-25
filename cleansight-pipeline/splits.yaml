@@ -2,7 +2,7 @@
 #
 # 规则(见 pipeline/split.py):
 #   - 已在 assignments 里的视频:永远用这里写的 split,人工可改、永不自动重排。
-#   - 不在的视频:00_status.py --assign 会按 hash(seed:stem) 确定性回填并写回这里。
+#   - 不在的视频:reconcile.py --assign 会按 hash(seed:stem) 确定性回填并写回这里。
 #   - split 取值:train / val / test / e2e_test(test 进入 YOLO 数据集;e2e_test 预留给端到端评测)。
 #   - 一个视频的所有帧只进它的 split,绝不跨 split(杜绝泄漏)。
 #

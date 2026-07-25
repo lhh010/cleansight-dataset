@@ -78,9 +78,9 @@
 1. **与 benchmark 源零重叠**：本项目任一源视频，**不得**与 `mixed-label-test` / `yolo-extra-test` 的源同一视频、也不得为**同一场次/同一次录制的相邻片段**（同场次会泄漏动作转移先验）。凡进 benchmark test 的 source_id 一律写入 `benchmark_test.yaml`，本项目选片前先查排除。
 2. **补 split 缺口的操作**（对齐 [archive/DATASET_BALANCE_REVIEW.md](../archive/DATASET_BALANCE_REVIEW.md) §5.4）：
    - 新视频导入本项目 → 标完 → 导出；
-   - `python cleansight-yolo-pipeline/00_status.py --assign` 让新视频按 hash 回填 `splits.yaml`；
+   - `python cleansight-pipeline/common/reconcile.py --assign` 让新视频按 hash 回填 `splits.yaml`；
    - 手工编辑 `splits.yaml`：把含 air_injection 的两个新源分别钉 `val` / `test`，含 short_brush_cleaning 的新源钉 `val`（保留老源 4807dbbe / 2c635ddc 原位）；
-   - 重建 `02_build_dataset.py`（YOLO）、`02_build_actionseq.py`（ActionSequence）。
+   - 重建 `build_dataset.py`（YOLO）、`build_actionseq.py`（ActionSequence）。
 3. **同视频不跨 split**：一条视频所有帧只进一个 split（`splits.yaml` 视频级真值），杜绝相邻帧泄漏。
 
 > ⚠️ 不要改老视频的 split 去救 air_injection——会破坏 YOLO 已验证划分，且把缺口在 split 间搬家。唯一正解是**补新源**。
@@ -103,5 +103,5 @@
 - [ ] 本批次源视频均**不在** `benchmark_test.yaml`，且非 benchmark 源的同场次相邻片段。
 - [ ] air_injection 新增 ≥2 源、short_brush_cleaning 新增 ≥1 源。
 - [ ] `actions` timeline 连续、段边界贴齐交互、无碎段。
-- [ ] `python cleansight-yolo-pipeline/count_classes.py`：air_injection / short_brush_cleaning 在 val、test 均 >0。
-- [ ] `python cleansight-yolo-pipeline/05_check.py --strict` 全 PASS（无 val/test 缺类 warning）。
+- [ ] `python cleansight-pipeline/common/count_classes.py`：air_injection / short_brush_cleaning 在 val、test 均 >0。
+- [ ] `python cleansight-pipeline/common/check.py --strict` 全 PASS（无 val/test 缺类 warning）。

@@ -18,10 +18,10 @@ Thumbs.db
 
 .claude
 raw-from Label Studio/
-cleansight-yolo-pipeline/raw/
-cleansight-yolo-pipeline/datasets/
-cleansight-yolo-pipeline/datasets_actionseq/
-cleansight-yolo-pipeline/datasets_actionmixed/
+cleansight-pipeline/raw/
+cleansight-pipeline/datasets/
+cleansight-pipeline/datasets_actionseq/
+cleansight-pipeline/datasets_actionmixed/
 
 mix-label-annotated/
 .obsidian/

@@ -5,9 +5,9 @@
 
 需 torch + ultralytics —— 用本项目 .venv/bin/python(见 requirements.txt)。
 
-用法(在 cleansight-yolo-pipeline/ 下执行):
-    <py> yolo/04_validate.py                # 全部有权重的组
-    <py> yolo/04_validate.py group2_small   # 只验某组
+用法(在 cleansight-pipeline/ 下执行):
+    <py> yolo/validate.py                # 全部有权重的组
+    <py> yolo/validate.py group2_small   # 只验某组
 """
 import sys
 
@@ -28,9 +28,9 @@ def evaluate(group, thr):
     data = DATASETS / group / "data.yaml"
     weight = RUNS / group / "weights" / "best.pt"
     if not weight.exists():
-        return None, None, None, [f"缺权重 {weight},先跑 03_train.py"]
+        return None, None, None, [f"缺权重 {weight},先跑 train.py"]
     if not data.exists():
-        return None, None, None, [f"缺 data.yaml {data},先跑 yolo/02_build.py"]
+        return None, None, None, [f"缺 data.yaml {data},先跑 yolo/build.py"]
 
     model = YOLO(str(weight))
     m = model.val(data=str(data), split="val", verbose=False,
@@ -103,7 +103,7 @@ def main():
     else:
         groups = []
     if not groups:
-        raise SystemExit("没有可验证的组(先 03_train.py),或显式传组名。")
+        raise SystemExit("没有可验证的组(先 train.py),或显式传组名。")
 
     any_fail = False
     for g in groups:

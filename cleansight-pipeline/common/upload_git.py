@@ -6,7 +6,7 @@ Repos:
   - lhh010/cleansight-yolo         ← datasets/{group1_large,group2_small}
   - lhh010/cleansight-ActionMixed  ← datasets_actionmixed/
 
-Usage: python common/upload_all.py [--dry-run]
+Usage: python common/upload_git.py [--dry-run]
 """
 import os
 import shutil

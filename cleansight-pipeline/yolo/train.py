@@ -5,9 +5,9 @@
 
 需 torch + ultralytics —— 用本项目 .venv/bin/python 跑(见 requirements.txt)。
 
-用法(在 cleansight-yolo-pipeline/ 下执行):
-    <py> yolo/03_train.py                 # 全部组
-    <py> yolo/03_train.py group2_small    # 只训某组
+用法(在 cleansight-pipeline/ 下执行):
+    <py> yolo/train.py                 # 全部组
+    <py> yolo/train.py group2_small    # 只训某组
 """
 import sys
 
@@ -40,13 +40,13 @@ def main():
     requested = [a for a in sys.argv[1:] if not a.startswith("-")]
     groups = requested or [p.name for p in sorted(DATASETS.iterdir()) if p.is_dir()]
     if not groups:
-        raise SystemExit(f"datasets/ 下没有数据集组,请先跑 yolo/02_build.py: {DATASETS}")
+        raise SystemExit(f"datasets/ 下没有数据集组,请先跑 yolo/build.py: {DATASETS}")
 
     results = []
     for g in groups:
         data = DATASETS / g / "data.yaml"
         if not data.exists():
-            print(f"  [skip] {g}: 缺 data.yaml,先跑 yolo/02_build.py")
+            print(f"  [skip] {g}: 缺 data.yaml,先跑 yolo/build.py")
             continue
         print(f"\n=== 训练 {g}  (device={device}, model={tcfg.get('model')}) ===")
         model = YOLO(tcfg.get("model", "yolo11n.pt"))
@@ -68,7 +68,7 @@ def main():
     print("\n=== 完成 ===")
     for g, best in results:
         print(f"{g}: {best}")
-    print("下一步:04_validate.py 出验收报告")
+    print("下一步:validate.py 出验收报告")
 
 
 if __name__ == "__main__":
