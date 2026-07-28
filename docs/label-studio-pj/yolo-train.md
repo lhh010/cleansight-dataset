@@ -1,9 +1,10 @@
-# CleanSight LS 采集方案 · **yolo-extra-train**
+# CleanSight LS 采集方案 · **yolo-train**
 
 > 项目类型：视频级**纯目标框**（bbox only，无动作时序）
 > 服务对象：**常规训练集** `cleansight-yolo` 的**检测短板动态补量池**
-> 原始需求源：[BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md) §1（逐类 P/R 是判据）+ 模型评测结果
-> 配套项目：`mixed-label-train`（完整序列，顺带覆盖 air_injection 时段的 air_gun）
+> 原始需求源：[BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md) §2 Group A（类别×尺度 EC）+ 逐类 P/R 阈值（`config.yaml`）+ 模型评测结果
+> 配套项目：`action-train`（动作轨,另一条训练轨,不标框）
+> 存量来源：`mixed-train`〔**已退役**〕的 bbox+动作全标数据仍作 bootstrap 种子(见 [README.md](README.md) §3),可派生本轨训练框
 
 ---
 
@@ -12,14 +13,14 @@
 - **哪类差补哪类，不锁定单一目标**：本项目是**评测驱动的检测补量池**——按最新一轮模型评测的**逐类 recall / precision**，谁弱补谁、弱多少补多少。不预先窄化到某一类；下面 §2 列的是**当前已知短板**，但真正的采集清单以**每轮 `validate` 的逐类指标**为准，随之滚动更新。
 - **只补检测框、不碰动作**：不需要动作语义，砍掉 `actions` timeline，标注成本大幅降低。适合「只想给某几类多喂框」的快速迭代。
 - **用视频模式而非图像单帧**：`VideoRectangle` 的关键帧插值对「目标连续出现的相邻帧」远快于逐张图像标注。
-- **与 mixed-label-train 分工（避免重复劳动）**：能靠完整动作序列自然带出的框（如 air_injection 时段的 air_gun）优先走 `mixed-label-train`；本项目专补**动作序列覆盖不到、或补完序列后评测仍弱**的类。
-- **复用规则**：可从 `mixed-label-train` 的源视频中再挑欠标类时段补框；但**不得**碰任何 benchmark test 源（`benchmark_test.yaml`）。
+- **框只在本轨手标**：解耦后动作采集走 `action-train`,而 `action-train` **不标框**(框由 YOLO 推理生成,见 [README.md](README.md) §2 框的出处铁律)。因此**所有手标检测框都集中在本项目**——包括从前指望 `mixed-train` 完整序列"顺带带出"的框(如 air_injection 时段的 air_gun):这类框现由**存量 mixed bootstrap 派生**补上,新增补量则直接在本项目标该时段帧。
+- **复用规则**:可复用**存量 mixed bootstrap 源**、或与 `action-train` 共享的原始视频,挑欠标类时段补框;它们进同一 `splits.yaml` 视频级 split,不产生跨 split 泄漏。但**不得**碰任何 benchmark test 源(`benchmark_test.yaml`)。
 
 ---
 
 ## 1. LS Settings（labeling config）
 
-在 mixed-label 基础上删去两条 timeline，只留目标框：
+标准 8 类目标框配置(同 [README.md](README.md) §7.1),无 timeline、无动作:
 
 ```xml
 <View>
@@ -40,7 +41,7 @@
 </View>
 ```
 
-**约定**（与 mixed-label 一致）
+**约定**(标签块同 [README.md](README.md) §7.1)
 - 8 类标签保持不变——即便本批次只关心少数类，其它可见目标也**照常画框**（bbox=可见，漏框会变成 recall 训练噪声）。
 - `allowEmpty="true"` 保留空帧。
 
@@ -57,14 +58,14 @@
 
 | 起点优先级 | 检测类 | 现状（实例/占比） | 补量方向 | 采集来源 |
 |---|---|---|---|---|
-| 高 | `brush_tip_out` | 318 / 4.8%，全集最稀缺 | 密采刷头露出帧 | 已有 long_brush 源（覆盖不足，非缺视频） |
-| 高 | `air_gun` | 394 / 5.9% | 若 air_injection 序列补完仍弱→再补注气时段 | air_injection 时段 |
-| 中 | `short_brush` | 910 / 13.6% | 视评测决定是否补 | short_brush_cleaning / flush 时段 |
+| P0 | `brush_tip_out` | 318 / 4.8%，全集最稀缺 | 密采刷头露出帧 | 已有 long_brush 源（覆盖不足，非缺视频） |
+| P0 | `air_gun` | 394 / 5.9% | 注气时段密采(air_injection 序列走 action-train 不带框,故 air_gun 框在本轨补) | 存量 bootstrap / 本轨标注气时段帧 |
+| P1 | `short_brush` | 910 / 13.6% | 视评测决定是否补 | short_brush_cleaning / flush 时段 |
 | 滚动 | **任意逐类指标跌破阈值的类** | 以 `validate` 为准 | 按实测短板补 | 对应类出现的时段 |
 
 > **不预设终点数字**：不锁「brush_tip_out 补到 1000」这类固定目标——占比达标但 recall 仍低说明是难度问题而非数量问题，此时该换难样本而非继续堆量；反之评测已过阈值就停。让**指标**决定停不停。
 
-**帧内条件（顺手强化，对齐 [BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md) §1 Group B）**
+**帧内条件（顺手强化，对齐 [BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md) §2 Group B）**
 - **极小尺度 <1%**：目标刚露出/远景状态的框；
 - **快速运动模糊**：快速运动致目标模糊的帧；
 - **重遮挡 30–70%**：手挡器械时仍可见部分的框。
@@ -75,7 +76,7 @@
 ## 3. 源级与隔离规则
 
 1. **不碰 benchmark 源**：选片先查 `benchmark_test.yaml`，任何 test 源及其同场次相邻片段排除。
-2. **复用 mixed-label-train 源允许**：同一训练视频可在本项目补稀有类框——它们进同一 `splits.yaml` 视频级 split，不产生跨 split 泄漏。
+2. **复用存量/共享训练源允许**:存量 mixed bootstrap 源、或与 `action-train` 共享的原始训练视频,均可在本项目补稀有类框——它们进同一 `splits.yaml` 视频级 split,不产生跨 split 泄漏。
 3. **数据增强不替代真实补标**：`augment.py` 只在 train 上对 air_gun/brush_tip_out 轻量增强（P2），是补充不是替代（[archive/DATASET_BALANCE_REVIEW.md](../archive/DATASET_BALANCE_REVIEW.md) §6 P2）。
 
 ---

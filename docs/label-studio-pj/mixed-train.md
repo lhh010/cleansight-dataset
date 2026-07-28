@@ -1,23 +1,30 @@
-# CleanSight LS 采集方案 · **mixed-label-train**
+# CleanSight LS 采集方案 · **mixed-train**〔已退役〕
+
+> ⚠️ **本项目对新采集已退役。** 训练侧混标(一条视频既标框又标动作)违反"框的出处铁律"——时序训练的框应由 YOLO 推理生成、不该手标(见 [README.md](README.md) §0/§2)。
+> **新增训练数据改走两条轨**:检测 → [yolo-train.md](yolo-train.md)(纯框);动作 → [action-train.md](action-train.md)(纯动作,不标框)。
+> **本项目已标的存量数据仍有用**:作两条轨的 **bootstrap 种子**——先派生 YOLO 训练集,YOLO 达标后同一份导出再派生时序训练集(框走 YOLO 推理);留 ~3 条划归 `action-test`/handeval。存量去向见 [README.md](README.md) §3。
+> 下文保留作**历史记录 + 存量数据的采集背景**,不再指导新采集。
+
+---
 
 > 项目类型：视频级完整标注（bbox + 动作时序）
-> 服务对象：**常规训练/验证集**——`cleansight-yolo`、`cleansight-ActionMixed`、`cleansight-ActionSequence` 的 train/val
+> 服务对象：**〔历史〕常规训练/验证集**——`cleansight-yolo`、`cleansight-ActionMixed` 的 train/val（`ActionSequence` 已从活跃流水线移除）
 > 原始需求源：[BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md)、[BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md)（本项目采「训练侧少样本补齐」，不采 benchmark test）
-> 配套项目：`yolo-extra-train`（纯 bbox 补量）、`mixed-label-test` / `yolo-extra-test`（benchmark，源级隔离）
+> 配套项目：`yolo-train`（纯 bbox 补量）、`action-test` / `yolo-test`（benchmark，源级隔离）
 
 ---
 
 ## 0. 定位与边界
 
 - **这是训练侧项目**，不是 benchmark。目标是**补齐少样本动作的完整序列**，让常规数据集在 train/val 上不再缺类、缺 split。
-- **只做「完整序列」**：每条视频从动作前上下文标到动作后上下文，`actions` timeline 连续覆盖。因为它同时喂 ActionSequence（视频级）与 ActionMixed（段级），必须是整段。
-- **不承担 benchmark test 采集**：benchmark 的 air_injection / short_brush_cleaning 测试序列在 `mixed-label-test` 里单独采，**源视频与本项目严格不重叠**（见 §3）。
+- **只做「完整序列」**：每条视频从动作前上下文标到动作后上下文，`actions` timeline 连续覆盖。〔历史原因〕当时它同时喂 `ActionSequence`（视频级,**已从活跃流水线移除**）与 ActionMixed（段级），必须是整段;现存量仅供 ActionMixed 派生。
+- **不承担 benchmark test 采集**：benchmark 的 air_injection / short_brush_cleaning 测试序列在 `action-test` 里单独采，**源视频与本项目严格不重叠**（见 §3）。
 
 ---
 
 ## 1. LS Settings（labeling config）
 
-沿用现行 mixed-label 配置，原样使用：
+存量 mixed-label 配置(bbox + 动作全标)。标签块即 [README.md](README.md) §7.1 的规范 8 类 + 5 类,其余项目均由此裁剪而来:
 
 ```xml
 <View>
@@ -57,15 +64,15 @@
 
 ## 2. 采集目标（按等价类桶）
 
-依据 [BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md) §1 Group A / [BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md) §1 Group B，训练侧最缺的是**少样本动作及其绑定的稀缺检测类**。
+依据 [BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md) §2 Group A / [BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md) §2 Group B（等价类维度均在 §2），训练侧最缺的是**少样本动作及其绑定的稀缺检测类**。
 
 | 优先级 | 采集目标 | 现状（真源/帧数） | 目标 | 顺带补齐的检测类 |
 |---|---|---|---|---|
-| **P0** | `air_injection` 完整序列 | 366 帧 / **仅 1 源**（4807dbbe，train） | **新增 ≥2 源**，钉 1→val、1→test | `air_gun`（现 394 → +~700） |
+| **P0** | `air_injection` 完整序列 | 367 帧 / **仅 1 源**（4807dbbe，train） | **新增 ≥2 源**，钉 1→val、1→test | `air_gun`（现 394 → +~700） |
 | **P0** | `short_brush_cleaning` 完整序列 | 252 帧(train) / **仅 2 源**，val=0 | **新增 ≥1 源**，钉→val | `short_brush`（现 910） |
-| P1 | `long_brush_withdraw` 补量 | 760 帧 | 顺采即可（有 insert 就有 withdraw） | `brush_tip_out`（见 `yolo-extra-train`） |
+| P1 | `long_brush_withdraw` 补量 | 760 帧 | 顺采即可（有 insert 就有 withdraw） | `brush_tip_out`（见 `yolo-train`） |
 
-> **数量参考**（[archive/DATASET_BALANCE_REVIEW.md](../archive/DATASET_BALANCE_REVIEW.md) §6）：air_injection 动作帧再补 ~400；air_gun / brush_tip_out 各补 600–800 实例（air_gun 这部分由本项目的 air_injection 序列覆盖，brush_tip_out 交 `yolo-extra-train`）。
+> **数量参考**（[archive/DATASET_BALANCE_REVIEW.md](../archive/DATASET_BALANCE_REVIEW.md) §6）：air_injection 动作帧再补 ~400；air_gun / brush_tip_out 各补 600–800 实例（air_gun 这部分由本项目的 air_injection 序列覆盖，brush_tip_out 交 `yolo-train`）。
 
 **采集时优先制造这些帧内条件**（顺手拿，不额外拍）：
 - 稀有类的相邻帧密集出现（air_gun 出现的整个注气时段、short_brush 清洗往复）；
@@ -75,12 +82,12 @@
 
 ## 3. 源级与隔离规则（**最关键**）
 
-1. **与 benchmark 源零重叠**：本项目任一源视频，**不得**与 `mixed-label-test` / `yolo-extra-test` 的源同一视频、也不得为**同一场次/同一次录制的相邻片段**（同场次会泄漏动作转移先验）。凡进 benchmark test 的 source_id 一律写入 `benchmark_test.yaml`，本项目选片前先查排除。
+1. **与 benchmark 源零重叠**：本项目任一源视频，**不得**与 `action-test` / `yolo-test` 的源同一视频、也不得为**同一场次/同一次录制的相邻片段**（同场次会泄漏动作转移先验）。凡进 benchmark test 的 source_id 一律写入 `benchmark_test.yaml`，本项目选片前先查排除。
 2. **补 split 缺口的操作**（对齐 [archive/DATASET_BALANCE_REVIEW.md](../archive/DATASET_BALANCE_REVIEW.md) §5.4）：
    - 新视频导入本项目 → 标完 → 导出；
    - `python cleansight-pipeline/common/reconcile.py --assign` 让新视频按 hash 回填 `splits.yaml`；
    - 手工编辑 `splits.yaml`：把含 air_injection 的两个新源分别钉 `val` / `test`，含 short_brush_cleaning 的新源钉 `val`（保留老源 4807dbbe / 2c635ddc 原位）；
-   - 重建 `build_dataset.py`（YOLO）、`build_actionseq.py`（ActionSequence）。
+   - 重建 `build_dataset.py`（YOLO）;〔历史〕`build_actionseq.py`（`ActionSequence`）随该管线移除已停用,现行时序集由 ActionMixed 侧构建。
 3. **同视频不跨 split**：一条视频所有帧只进一个 split（`splits.yaml` 视频级真值），杜绝相邻帧泄漏。
 
 > ⚠️ 不要改老视频的 split 去救 air_injection——会破坏 YOLO 已验证划分，且把缺口在 split 间搬家。唯一正解是**补新源**。

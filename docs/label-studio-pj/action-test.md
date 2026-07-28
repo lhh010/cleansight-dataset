@@ -1,9 +1,9 @@
-# CleanSight LS 采集方案 · **mixed-label-test**（benchmark）
+# CleanSight LS 采集方案 · **action-test**（benchmark）
 
 > 项目类型：视频级完整标注（bbox + 动作时序 + 环境等价类 + 对抗可见性）
 > 服务对象：**benchmark test**——`cleansight-ActionMixed` 时序分割 benchmark（全部）+ `cleansight-yolo` 检测 benchmark（供帧）
 > 原始需求源：[BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md)（主）、[BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md)（供帧）
-> 生命周期：**源级隔离 + 冻结（只增不改）**，定版打 tag `benchmark-seg-v0.1`
+> 生命周期：**源级隔离**；评测集一旦定版，标注**只增不改**。版本管理（冻结/发版/打 tag）**由 pipeline 侧负责，不在 LS**。
 
 ---
 
@@ -18,7 +18,7 @@
 
 ## 1. LS Settings（labeling config）
 
-在 mixed-label 基础上增加 `ec_env` 环境时序 + `adv_visibility` 对抗可见性标记：
+标准 8 类目标框 + 5 类动作时序配置(同 [README.md](README.md) §7.1),再加 `ec_env` 环境时序 + `adv_visibility` 对抗可见性标记(EC 词表见 [README.md](README.md) §7.2):
 
 ```xml
 <View>
@@ -78,7 +78,7 @@
 
 ## 2. 采集目标（按等价类桶，P0 优先）
 
-### 2.1 对抗-可见性（[BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md) §3，本套最核心 P0）
+### 2.1 对抗-可见性（[BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md) §2 Group A + §5 用例表，本套最核心 P0）
 
 benchmark 必须含「detection 单看会判错」的序列，否则捷径模型虚高。每类至少 1–2 条独立源序列：
 
@@ -115,11 +115,11 @@ benchmark 必须含「detection 单看会判错」的序列，否则捷径模型
 
 ## 3. 源级与隔离规则（**benchmark 生命线**）
 
-1. **整条源级隔离**：每条 test 源 `source_id` 写入 `benchmark_test.yaml`，`mixed-label-train` / `yolo-extra-train` 与 `splits.yaml` / `splits_actionmixed.yaml` 一律 hard-exclude。
+1. **整条源级隔离**：每条 test 源 `source_id` 写入 `benchmark_test.yaml`,所有训练侧项目(`yolo-train` / `action-train`,及退役存量 `mixed-train` bootstrap)与 `splits.yaml` / `splits_actionmixed.yaml` 一律 hard-exclude。
 2. **禁用段级切分**：ActionMixed 的 benchmark test 走「视频级·整段」，**不进** `splits_actionmixed.yaml` 的段级 hash。
 3. **同场次即泄漏**：与任一 train/val 视频同一次录制的相邻片段**不得**当 test（转移先验泄漏）。
-4. **与 `yolo-extra-test` 的关系**：det benchmark = 本项目切帧 ∪ `yolo-extra-test` 帧；两者可共享 test 源，但都不得触碰 train 源。
-5. **冻结**：定版打 tag，只增不改；后续只追加新序列，不改已冻结标注。
+4. **与 `yolo-test` 的关系**：det benchmark = 本项目切帧 ∪ `yolo-test` 帧；两者可共享 test 源，但都不得触碰 train 源。
+5. **定版后标注只增不改**：后续只追加新序列，不改已交付的标注（版本冻结/发版由 pipeline 侧做，不在 LS）。
 
 ---
 
@@ -133,7 +133,7 @@ benchmark 必须含「detection 单看会判错」的序列，否则捷径模型
 
 ---
 
-## 5. 自查清单（冻结前）
+## 5. 自查清单（交付评测集前）
 
 - [ ] 每条源 `source_id` 已入 `benchmark_test.yaml`，且不与任何 train/val 源同场次。
 - [ ] 对抗-可见性 4 类用例各 ≥1 条独立源序列，`adv_visibility` 已勾。
@@ -141,4 +141,4 @@ benchmark 必须含「detection 单看会判错」的序列，否则捷径模型
 - [ ] insert↔withdraw、罕见转移、模糊边界、段内遮挡桶均有覆盖。
 - [ ] 每条为完整序列，`actions` 连续无碎段，未散帧。
 - [ ] 生成 EC 覆盖矩阵，对照 [BENCHMARK_SEGMENTATION.md](../BENCHMARK_SEGMENTATION.md) §2 的 P0/P1 逐桶核对为 ✅。
-- [ ] 定版打 tag `benchmark-seg-v0.1`。
+- [ ] 标注定版后不再改动，交 pipeline 侧冻结发版。
