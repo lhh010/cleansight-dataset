@@ -2,6 +2,10 @@
 """
 稀有类别数据增强 —— 对样本量不足的类别做随机仿射变换，生成增强副本。
 
+**只增强 train**：合成图只能证明"扛得住某种变换"，证明不了真实条件下的能力，
+所以 val 会虚高、benchmark test 更是红线（见 BENCHMARK_DETECTION.md §3：
+"增强样本原则上不进 benchmark test"）。增强是 train 侧补覆盖的手段，不是替代真实采集。
+
 增强策略（仅针对包含稀有类别的帧）：
   - 随机旋转 [-15°, +15°]，变换后 bbox 取 AABB（保持 YOLO 兼容）
   - 随机缩放 [0.85, 1.15]
@@ -23,14 +27,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# --- 从子目录运行时也能 import 顶层 utils/ ---
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from utils.common import ROOT, load_config
+from yolo import manifest
 
-OUT_ROOT = ROOT / "datasets"
-
+# 只在这个 split 上增强（理由见模块 docstring）
+AUG_SPLIT = "train"
 # 可配置的稀有阈值：某类总框数 < RARE_THRESHOLD 即触发增强
 RARE_THRESHOLD = 50
 # 每个稀有帧生成的增强副本数
@@ -47,7 +50,8 @@ def scan_dataset(group_dir, class_names, rare_threshold=RARE_THRESHOLD):
     total_boxes = defaultdict(int)
     frame_records = []  # (split, img_path, label_path)
 
-    for split in ("train", "val", "test"):
+    # 只扫 train：val 上增强会让验收虚高，test 上增强直接违反 benchmark 红线
+    for split in (AUG_SPLIT,):
         img_dir = group_dir / "images" / split
         lbl_dir = group_dir / "labels" / split
         if not img_dir.exists():
@@ -168,13 +172,14 @@ def transform_bbox(cx, cy, bw, bh, M, img_w, img_h):
 
 
 def main():
-    cfg = load_config()
-    groups = cfg["groups"]
+    m = manifest.load(manifest.TRAIN_MANIFEST)
+    groups = manifest.load_classes()
+    out_root = manifest.out_root(m)
 
     threshold = RARE_THRESHOLD
     copies = AUG_COPIES
     dry_run = "--dry-run" in sys.argv
-    jpg_q = cfg.get("jpg_quality", 90)
+    jpg_q = manifest.sampling(m).get("jpg_quality", 90)
 
     # 解析命令行参数
     for arg in sys.argv[1:]:
@@ -183,14 +188,14 @@ def main():
         elif arg.startswith("--copies="):
             copies = int(arg.split("=")[1])
 
-    print(f"稀有阈值: < {threshold} 框  每帧增强副本: {copies}")
+    print(f"稀有阈值: < {threshold} 框  每帧增强副本: {copies}  只增强 split: {AUG_SPLIT}")
     if dry_run:
         print("[dry-run] 只统计，不生成文件")
 
     total_augmented = 0
 
     for g, class_names in groups.items():
-        group_dir = OUT_ROOT / g
+        group_dir = out_root / g
         if not group_dir.exists():
             print(f"\n[skip] {g}: 数据集目录不存在")
             continue
@@ -275,7 +280,7 @@ def main():
 
     if not dry_run:
         print(f"\n总共生成 {total_augmented} 张增强图像。")
-        print("下一步:train.py / validate.py")
+        print("下一步:common/check.py 校验,然后 yolo/upload.py 发布")
 
 
 if __name__ == "__main__":

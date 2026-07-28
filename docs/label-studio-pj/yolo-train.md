@@ -14,7 +14,7 @@
 - **只补检测框、不碰动作**：不需要动作语义，砍掉 `actions` timeline，标注成本大幅降低。适合「只想给某几类多喂框」的快速迭代。
 - **用视频模式而非图像单帧**：`VideoRectangle` 的关键帧插值对「目标连续出现的相邻帧」远快于逐张图像标注。
 - **框只在本轨手标**：解耦后动作采集走 `action-train`,而 `action-train` **不标框**(框由 YOLO 推理生成,见 [README.md](README.md) §2 框的出处铁律)。因此**所有手标检测框都集中在本项目**——包括从前指望 `mixed-train` 完整序列"顺带带出"的框(如 air_injection 时段的 air_gun):这类框现由**存量 mixed bootstrap 派生**补上,新增补量则直接在本项目标该时段帧。
-- **复用规则**:可复用**存量 mixed bootstrap 源**、或与 `action-train` 共享的原始视频,挑欠标类时段补框;它们进同一 `splits.yaml` 视频级 split,不产生跨 split 泄漏。但**不得**碰任何 benchmark test 源(`benchmark_test.yaml`)。
+- **复用规则**:可复用**存量 mixed bootstrap 源**、或与 `action-train` 共享的原始视频,挑欠标类时段补框;它们进同一份训练轨清单(`cleansight-pipeline/yolo/train.yaml` 的 `tasks`,task 级 split),不产生跨 split 泄漏。但**不得**碰任何 benchmark test 源(`yolo/test.yaml`)。
 
 ---
 
@@ -75,7 +75,7 @@
 
 ## 3. 源级与隔离规则
 
-1. **不碰 benchmark 源**：选片先查 `benchmark_test.yaml`，任何 test 源及其同场次相邻片段排除。
+1. **不碰 benchmark 源**：选片先查 benchmark 清单(`cleansight-pipeline/yolo/test.yaml`)，任何 test 源及其同场次相邻片段排除。两份清单的 task id 零交集由 `yolo/manifest.py` 的 `assert_disjoint()` 在每次 build/对账时强制。
 2. **复用存量/共享训练源允许**:存量 mixed bootstrap 源、或与 `action-train` 共享的原始训练视频,均可在本项目补稀有类框——它们进同一 `splits.yaml` 视频级 split,不产生跨 split 泄漏。
 3. **数据增强不替代真实补标**：`augment.py` 只在 train 上对 air_gun/brush_tip_out 轻量增强（P2），是补充不是替代（[archive/DATASET_BALANCE_REVIEW.md](../archive/DATASET_BALANCE_REVIEW.md) §6 P2）。
 
@@ -92,7 +92,7 @@
 
 ## 5. 自查清单（导出前）
 
-- [ ] 本批次源均不在 `benchmark_test.yaml`。
+- [ ] 本批次 task 均不在 `cleansight-pipeline/yolo/test.yaml`(benchmark 清单)。
 - [ ] 本批次补的是**上一轮评测跌破阈值的类**（有据可查，不是拍脑袋堆量）。
 - [ ] 补量类出现帧内**其它可见目标未漏标**。
 - [ ] 补完后重跑 `validate`，对应类逐类 recall/precision 有回升（达阈值即可停，未回升则改补难样本而非继续堆量）。

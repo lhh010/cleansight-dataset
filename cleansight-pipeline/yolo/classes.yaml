@@ -1,0 +1,13 @@
+# 检测类别分组 —— 两轨(train.yaml / test.yaml)唯一的共享配置。
+#
+# 组名 -> 该组的类列表,顺序即 class id(各组各自从 0 开始)。
+# 未列入任何组的检测类在 build 时自动忽略。
+#
+# 为什么单独一份:class id 映射是两轨必须**逐字一致**的东西 —— 训练轨出的权重要在
+# benchmark 轨上评,对不上就全错。写两遍必然漂移,所以抽出来;除本文件外两轨零共享。
+#
+# 类别只能追加到列表末尾 —— 插中间会打乱已训权重的 class id 映射。
+
+groups:
+  group1_large: [hand, scope_control_body, scope_mid_section]
+  group2_small: [syringe, air_gun, scope_distal_end, short_brush, brush_tip_out]

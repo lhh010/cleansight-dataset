@@ -15,16 +15,42 @@ import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent  # yolo_pipeline/(自包含)
+# 默认路径:仅作未显式传参时的兜底。真正的路径归各数据集的 yaml 管
+# (yolo 见 yolo/{train,test}.yaml 的 source 段),这里不该成为唯一真源。
 EXPORT_DIR = ROOT / "raw" / "exports"
 VIDEO_DIR = ROOT / "raw" / "videos"
 
 
-def latest_export(export_dir: Path = EXPORT_DIR) -> Path:
-    """取 raw/exports/ 下文件名排序最后一个 JSON。"""
-    files = sorted(export_dir.glob("*.json"))
+def latest_export(export_dir: Path = EXPORT_DIR, project: str = None) -> Path:
+    """取导出目录下文件名排序最后一个 JSON。
+
+    project 非空 -> 只看 <export_dir>/<project>/(按 LS 项目分轨)。
+    project 为空 -> 先看 <export_dir>/ 直下,没有则递归找(兼容未分轨的旧布局)。
+    """
+    base = Path(export_dir) / project if project else Path(export_dir)
+    files = sorted(base.glob("*.json"))
+    if not files and not project:
+        files = sorted(Path(export_dir).rglob("*.json"))
     if not files:
-        raise SystemExit(f"raw/exports/ 下没有导出 JSON: {export_dir}")
+        raise SystemExit(f"没有导出 JSON: {base}")
     return files[-1]
+
+
+def load_projects(export_dir: Path, projects) -> tuple:
+    """按序读多个 LS 项目的最新导出,合并成一份 task 列表。
+
+    同一 task id 在多个项目里出现时,**后面的项目覆盖前面的** —— 这样把新项目
+    排在后面就能让新标注盖过存量。返回 (tasks, 用到的导出文件名列表)。
+    """
+    if not projects:
+        raise SystemExit("source.projects 为空,不知道该读哪个 LS 项目的导出")
+    merged, names = {}, []
+    for proj in projects:
+        path = latest_export(export_dir, proj)
+        names.append(path.name)
+        for task in load_tasks(path):
+            merged[int(task["id"])] = task
+    return [merged[k] for k in sorted(merged)], names
 
 
 def load_tasks(json_path: Path):

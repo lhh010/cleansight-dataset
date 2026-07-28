@@ -2,28 +2,21 @@
 """
 数据集生成后的样本分布统计(训练帧粒度)。
 
-纯扫描落盘的 label 文件(datasets/<组>/labels/{train,val}/*.txt),不解码视频、不需 torch,
+纯扫描落盘的 label 文件(<组>/labels/<split>/*.txt),不解码视频、不需 torch,
 因此统计是"生成完毕的数据集"的纯函数:可信、可随时独立重算(不必重建)。
 
   - 帧数 = label 文件数(一帧一文件);框数 = 所有文件的行数之和;class_id = 每行首列。
-  - 逐类给出 train/val 帧数、框数与 val 帧占比,并对空 split / 某类 val 无样本给出提示
-    (与 validate 的验收口径呼应)。
+  - 逐类给出各 split 的帧数/框数,并对空 split、某类某 split 无样本给出提示。
 
-独立重算:
-    python3 -c "from utils import stats; stats.main()"
+split 名与目录位置由调用方传入(来自各数据集的 yaml),本模块不含字面量。
 """
 from collections import defaultdict
 
-from utils.common import ROOT, load_config
 
-DATASETS = ROOT / "datasets"
-SPLITS = ("train", "val", "test")
-
-
-def scan_group(group_dir):
-    """扫描一个组的 labels/,返回 {split: {frames, boxes, cls_frames{cid}, cls_boxes{cid}}}。"""
+def scan_group(group_dir, splits):
+    """扫描一个组的 labels/,返回 {split: {frames, boxes, cls_frames, cls_boxes}}。"""
     out = {}
-    for split in SPLITS:
+    for split in splits:
         d = group_dir / "labels" / split
         frames = boxes = 0
         cls_frames = defaultdict(int)
@@ -46,57 +39,36 @@ def scan_group(group_dir):
     return out
 
 
-def print_distribution(group, class_names, group_dir=None):
-    """打印一个组的逐类 train/val 帧/框分布 + 提示。返回扫描结果 dict。"""
-    group_dir = group_dir or (DATASETS / group)
-    st = scan_group(group_dir)
-    tr, va, te = st["train"], st["val"], st["test"]
+def print_distribution(group, class_names, group_dir, splits):
+    """打印一个组逐类 × 逐 split 的帧/框分布 + 提示。返回扫描结果 dict。"""
+    st = scan_group(group_dir, splits)
 
+    head = "".join(f"{s + '帧':>9}" for s in splits) + "".join(f"{s + '框':>9}" for s in splits)
+    width = 24 + 18 * len(splits)
     print(f"\n=== 样本分布 · {group}  (训练帧粒度,扫描 {group_dir}/labels) ===")
-    print(f"{'类别':<22} {'train帧':>8} {'val帧':>7} {'test帧':>7} {'train框':>8} {'val框':>7} {'test框':>7}")
-    print("-" * 75)
+    print(f"{'类别':<22}{head}")
+    print("-" * width)
     for cid, name in enumerate(class_names):
-        tf, vf, tef = tr["cls_frames"].get(cid, 0), va["cls_frames"].get(cid, 0), te["cls_frames"].get(cid, 0)
-        tb, vb, teb = tr["cls_boxes"].get(cid, 0), va["cls_boxes"].get(cid, 0), te["cls_boxes"].get(cid, 0)
-        print(f"{name:<22} {tf:>8} {vf:>7} {tef:>7} {tb:>8} {vb:>7} {teb:>7}")
-    tf_all, vf_all, tef_all = tr["frames"], va["frames"], te["frames"]
-    tb_all, vb_all, teb_all = tr["boxes"], va["boxes"], te["boxes"]
-    print("-" * 75)
-    print(f"{'合计(帧/框)':<22} {tf_all:>8} {vf_all:>7} {tef_all:>7} {tb_all:>8} {vb_all:>7} {teb_all:>7}")
+        cells = "".join(f"{st[s]['cls_frames'].get(cid, 0):>9}" for s in splits)
+        cells += "".join(f"{st[s]['cls_boxes'].get(cid, 0):>9}" for s in splits)
+        print(f"{name:<22}{cells}")
+    print("-" * width)
+    totals = "".join(f"{st[s]['frames']:>9}" for s in splits)
+    totals += "".join(f"{st[s]['boxes']:>9}" for s in splits)
+    print(f"{'合计(帧/框)':<22}{totals}")
 
-    # 提示:与验收口径呼应
     warns = []
-    if tf_all == 0:
-        warns.append("train 为空 —— 无法训练")
-    if vf_all == 0:
-        warns.append("val 为空 —— 无法验证/验收(04 会判 FAIL)")
-    if tef_all == 0:
-        warns.append("test 为空 —— 缺少独立测试集")
+    for s in splits:
+        if st[s]["frames"] == 0:
+            warns.append(f"{s} 为空")
     for cid, name in enumerate(class_names):
-        tf, vf, tef = tr["cls_frames"].get(cid, 0), va["cls_frames"].get(cid, 0), te["cls_frames"].get(cid, 0)
-        if tf + vf + tef == 0:
-            warns.append(f"类别 {name} train/val/test 都无样本")
-        elif vf == 0 and tf > 0:
-            warns.append(f"类别 {name} val 无样本 —— 该类无法评估(04 会判 FAIL)")
-        elif tef == 0 and tf + vf > 0:
-            warns.append(f"类别 {name} test 无样本 —— 缺乏独立测试覆盖")
+        per = {s: st[s]["cls_frames"].get(cid, 0) for s in splits}
+        if sum(per.values()) == 0:
+            warns.append(f"类别 {name} 在所有 split 都无样本")
+        else:
+            for s in splits:
+                if per[s] == 0:
+                    warns.append(f"类别 {name} 在 {s} 无样本")
     for w in warns:
         print(f"  [WARN] {w}")
     return st
-
-
-def main():
-    cfg = load_config()
-    groups = cfg["groups"]
-    if not DATASETS.exists():
-        raise SystemExit(f"未找到 {DATASETS},先跑 yolo/build.py")
-    for g, class_names in groups.items():
-        gdir = DATASETS / g
-        if not gdir.exists():
-            print(f"\n[skip] {g}: 无 {gdir}(尚未生成)")
-            continue
-        print_distribution(g, class_names, gdir)
-
-
-if __name__ == "__main__":
-    main()

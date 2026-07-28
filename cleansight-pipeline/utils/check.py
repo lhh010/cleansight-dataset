@@ -7,9 +7,16 @@
 校验项:
   1. 结构完整性 — data.yaml、images/labels 一一对应、0 字节文件
   2. 标注合法性 — class_id 范围、归一化坐标、列数格式
-  3. Split 合理性 — 非空 split、比例偏差、每类 val 覆盖
+  3. Split 合理性 — 非空 split、比例偏差、每类覆盖
   4. 图像完整性 — PIL 解码抽查
-  5. 时序一致性 — 同视频前缀帧不跨 split
+  5. 时序一致性 — 同一 task 的帧不跨 split
+
+split 名从 data.yaml 现读(数据集自己声明布局),本模块不含 split 字面量。
+比例期望与"哪些 split 必须每类有样本"由调用方传入 —— 因为不同轨的判据不同:
+训练轨按比例切分、val 每类必须有样本;benchmark 是**策展**的,按比例查它没有意义。
+
+  ⚠️ benchmark(test)的达标口径尚未定稿(覆盖率?每桶最少样本?还是只出报告不判
+     PASS/FAIL?),所以这里对 test 只给 warn,不判 FAIL。定下来后再单独设计。
 """
 
 from collections import defaultdict
@@ -18,8 +25,6 @@ from typing import Optional
 
 import yaml
 from PIL import Image
-
-SPLITS = ("train", "val", "test")
 
 # ---------------------------------------------------------------------------
 # 结果容器
@@ -48,6 +53,12 @@ class CheckResult:
 # 1. 结构完整性
 # ===================================================================
 
+def _splits_from_data_yaml(cfg: dict) -> list:
+    """data.yaml 里声明了哪些 split(键值形如 `train: images/train`)。"""
+    reserved = {"path", "nc", "names", "download"}
+    return [k for k, v in cfg.items() if k not in reserved and isinstance(v, str)]
+
+
 def _check_structure(dataset_dir: Path, result: CheckResult) -> Optional[dict]:
     """data.yaml 可解析、images/ 与 labels/ 一一对应、无 0 字节文件。"""
     data_yaml = dataset_dir / "data.yaml"
@@ -59,6 +70,11 @@ def _check_structure(dataset_dir: Path, result: CheckResult) -> Optional[dict]:
         cfg = yaml.safe_load(data_yaml.read_text(encoding="utf-8")) or {}
     except Exception as exc:
         result.error(f"data.yaml 解析失败: {exc}")
+        return None
+
+    splits = _splits_from_data_yaml(cfg)
+    if not splits:
+        result.error("data.yaml 未声明任何 split")
         return None
 
     nc = cfg.get("nc")
@@ -77,7 +93,7 @@ def _check_structure(dataset_dir: Path, result: CheckResult) -> Optional[dict]:
     total_images = 0
     empty_label_count = 0
 
-    for split in SPLITS:
+    for split in splits:
         img_dir = dataset_dir / "images" / split
         lbl_dir = dataset_dir / "labels" / split
 
@@ -107,11 +123,10 @@ def _check_structure(dataset_dir: Path, result: CheckResult) -> Optional[dict]:
                 result.error(f"标注无对应图像: {lbl.relative_to(dataset_dir)}")
 
         if len(imgs) == 0:
-            label_map = {"train": "训练", "val": "评估", "test": "测试"}
-            result.error(f"images/{split}/ 为空 —— 无法{label_map.get(split, split)}")
+            result.warn(f"images/{split}/ 为空")
 
     if empty_label_count > 0:
-        result.warn(f"{empty_label_count} 个标注文件为空（无目标帧，可能正常）")
+        result.warn(f"{empty_label_count} 个标注文件为空（空帧负样本，benchmark 侧属正常）")
     if total_images == 0:
         result.error("数据集没有任何图像文件")
 
@@ -119,6 +134,7 @@ def _check_structure(dataset_dir: Path, result: CheckResult) -> Optional[dict]:
         "nc": nc,
         "names": list(names.values()) if isinstance(names, dict) else list(names),
         "total_images": total_images,
+        "splits": splits,
     }
 
 
@@ -137,7 +153,7 @@ def _check_labels(dataset_dir: Path, meta: Optional[dict], result: CheckResult) 
     oob = 0
     zero_wh = 0
 
-    for split in SPLITS:
+    for split in meta["splits"]:
         lbl_dir = dataset_dir / "labels" / split
         if not lbl_dir.is_dir():
             continue
@@ -195,34 +211,30 @@ def _check_labels(dataset_dir: Path, meta: Optional[dict], result: CheckResult) 
 # 3. Split 合理性
 # ===================================================================
 
-def _load_expected_ratios(pkg_root: Path):
-    """从 config.yaml 读取期望比例，失败则用默认值。"""
-    config_path = pkg_root / "config.yaml"
-    if config_path.exists():
-        try:
-            cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-            return (cfg.get("test_ratio", 0.2), cfg.get("val_ratio", 0.2))
-        except Exception:
-            pass
-    return 0.2, 0.2
-
-
 def _check_splits(
-    dataset_dir: Path, meta: Optional[dict], result: CheckResult, pkg_root: Path
+    dataset_dir: Path, meta: Optional[dict], result: CheckResult,
+    ratio_expectations: Optional[dict], required_splits,
 ) -> None:
-    """检查 split 比例偏差、每类 val/test 覆盖。"""
+    """检查 split 比例偏差、每类覆盖。
+
+    ratio_expectations: {split: 期望占比},**分母只算这些 split** —— 策展的
+        benchmark 不该参与比例约束,所以它不出现在这个字典里。None = 跳过比例检查。
+    required_splits: 这些 split 里某类无样本判 error(如训练轨的 val:该类无法评估);
+        其余 split 只 warn。
+    """
     if meta is None:
         return
 
     nc = meta["nc"]
     names = meta["names"]
+    splits = meta["splits"]
 
     split_frames: dict[str, int] = {}
     cls_split_frames: dict[str, dict[int, int]] = {
-        split: defaultdict(int) for split in SPLITS
+        split: defaultdict(int) for split in splits
     }
 
-    for split in SPLITS:
+    for split in splits:
         lbl_dir = dataset_dir / "labels" / split
         if not lbl_dir.is_dir():
             split_frames[split] = 0
@@ -245,55 +257,49 @@ def _check_splits(
             for cid in seen:
                 cls_split_frames[split][cid] += 1
 
-    total = sum(split_frames.values())
-    if total == 0:
+    if sum(split_frames.values()) == 0:
         return
 
-    expected_test, expected_val = _load_expected_ratios(pkg_root)
-    expected_train = 1.0 - expected_val - expected_test
-    actual = {
-        "train": split_frames.get("train", 0) / total,
-        "val": split_frames.get("val", 0) / total,
-        "test": split_frames.get("test", 0) / total,
-    }
-    expected = {"train": expected_train, "val": expected_val, "test": expected_test}
+    # 比例检查:分母只算参与比例切分的 split(策展的 benchmark 不在其中)
+    if ratio_expectations:
+        base = sum(split_frames.get(s, 0) for s in ratio_expectations)
+        if base:
+            for split, exp in ratio_expectations.items():
+                actual = split_frames.get(split, 0) / base
+                dev = abs(actual - exp)
+                if dev > 0.15:
+                    result.warn(
+                        f"images/{split} 在 {'+'.join(ratio_expectations)} 中占比 "
+                        f"{actual:.1%}，与预期 {exp:.1%} 偏差 {dev:.1%}"
+                        f"（样本少时常见，增多后应收敛）"
+                    )
 
-    for split in SPLITS:
-        dev = abs(actual[split] - expected[split])
-        if dev > 0.15:
-            result.warn(
-                f"images/{split} 占比 {actual[split]:.1%}，"
-                f"与预期 {expected[split]:.1%} 偏差 {dev:.1%}"
-                f"（样本少时常见，增多后应收敛）"
-            )
-
+    required = set(required_splits or ())
     for cid in range(nc):
         name = names[cid] if cid < len(names) else f"class_{cid}"
-        tr = cls_split_frames["train"].get(cid, 0)
-        va = cls_split_frames["val"].get(cid, 0)
-        te = cls_split_frames["test"].get(cid, 0)
-
-        if tr + va + te == 0:
+        per = {s: cls_split_frames[s].get(cid, 0) for s in splits}
+        if sum(per.values()) == 0:
             result.warn(f"类别 '{name}' (id={cid}) 在所有 split 中均无样本")
-        elif va == 0 and tr > 0:
-            result.error(
-                f"类别 '{name}' (id={cid}) val 无样本"
-                f"（train 有 {tr} 帧）—— 该类无法评估"
-            )
-        elif te == 0 and tr + va > 0:
-            result.warn(
-                f"类别 '{name}' (id={cid}) test 无样本 —— 缺乏独立测试覆盖"
-            )
+            continue
+        for s in splits:
+            if per[s] > 0:
+                continue
+            elsewhere = sum(v for k, v in per.items() if k != s)
+            if s in required:
+                result.error(f"类别 '{name}' (id={cid}) 在 {s} 无样本"
+                             f"（其余 split 共 {elsewhere} 帧）—— 该类无法评估")
+            else:
+                result.warn(f"类别 '{name}' (id={cid}) 在 {s} 无样本 —— 覆盖不足")
 
 
 # ===================================================================
 # 4. 图像完整性
 # ===================================================================
 
-def _check_images(dataset_dir: Path, result: CheckResult) -> None:
+def _check_images(dataset_dir: Path, result: CheckResult, splits) -> None:
     """等距抽样检查 jpg/png 可被 PIL 解码。确定性的，不依赖随机。"""
     all_imgs: list[Path] = []
-    for split in SPLITS:
+    for split in splits:
         img_dir = dataset_dir / "images" / split
         if img_dir.is_dir():
             all_imgs.extend(sorted(img_dir.glob("*.jpg")))
@@ -325,27 +331,29 @@ def _check_images(dataset_dir: Path, result: CheckResult) -> None:
 # 5. 时序一致性（同视频帧不跨 split）
 # ===================================================================
 
-def _check_temporal_consistency(dataset_dir: Path, result: CheckResult) -> None:
-    """检查帧名前缀（{task_id:02d}_{视频名前12位}）是否跨 split。"""
-    video_split: dict[str, str] = {}
+def _check_temporal_consistency(dataset_dir: Path, result: CheckResult, splits) -> None:
+    """同一 task 的帧不得跨 split（时间相邻泄漏）。
 
-    for split in SPLITS:
+    帧名 `t{task_id}_{frame:06d}[_变体]`，首段即 task 身份。LS task id 全局唯一，
+    所以这一条同时覆盖了训练轨与 benchmark 轨之间的源级隔离。
+    """
+    task_split: dict[str, str] = {}
+
+    for split in splits:
         img_dir = dataset_dir / "images" / split
         if not img_dir.is_dir():
             continue
         for img in sorted(img_dir.glob("*.jpg")) + sorted(img_dir.glob("*.png")):
-            stem = img.stem
-            parts = stem.split("_")
-            video_key = f"{parts[0]}_{parts[1]}" if len(parts) >= 2 else stem
+            task_key = img.stem.split("_")[0]
 
-            prev = video_split.get(video_key)
+            prev = task_split.get(task_key)
             if prev is not None and prev != split:
                 result.error(
-                    f"时序泄漏: 视频 '{video_key}' 的帧同时出现在 "
+                    f"泄漏: task '{task_key}' 的帧同时出现在 "
                     f"'{prev}' 和 '{split}' 中（例: {img.name}）"
                 )
             elif prev is None:
-                video_split[video_key] = split
+                task_split[task_key] = split
 
 
 # ===================================================================
@@ -356,7 +364,8 @@ def check_dataset(
     dataset_dir: Path,
     name: str = "",
     check_images_flag: bool = True,
-    pkg_root: Optional[Path] = None,
+    ratio_expectations: Optional[dict] = None,
+    required_splits=(),
 ) -> CheckResult:
     """对单个数据集目录执行全部校验。
 
@@ -364,8 +373,10 @@ def check_dataset(
         dataset_dir: 数据集根目录（包含 data.yaml、images/、labels/）
         name: 显示名称（为空则用目录名）
         check_images_flag: False 跳过图像解码抽查
-        pkg_root: pipeline 根目录（用于读 config.yaml 期望比例），
-                  默认取 dataset_dir 上两级
+        ratio_expectations: {split: 期望占比}，分母只算这些 split。None 跳过比例检查
+        required_splits: 这些 split 里某类无样本判 error，其余只 warn
+
+    split 名从 data.yaml 现读，本函数不预设有哪些 split。
 
     Returns:
         CheckResult — .passed / .errors / .warnings
@@ -378,15 +389,13 @@ def check_dataset(
         result.error(f"数据集目录不存在: {dataset_dir}")
         return result
 
-    if pkg_root is None:
-        pkg_root = dataset_dir.parent.parent if dataset_dir.parent else dataset_dir
-
     meta = _check_structure(dataset_dir, result)
     _check_labels(dataset_dir, meta, result)
-    _check_splits(dataset_dir, meta, result, pkg_root)
+    _check_splits(dataset_dir, meta, result, ratio_expectations, required_splits)
+    splits = meta["splits"] if meta else []
     if check_images_flag:
-        _check_images(dataset_dir, result)
-    _check_temporal_consistency(dataset_dir, result)
+        _check_images(dataset_dir, result, splits)
+    _check_temporal_consistency(dataset_dir, result, splits)
 
     return result
 

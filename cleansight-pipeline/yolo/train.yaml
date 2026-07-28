@@ -1,0 +1,57 @@
+# 训练轨(LS 项目 yolo-train)—— 配置 + 清单一体,与 benchmark 轨(test.yaml)完全解耦。
+#
+# 清单语义:
+#   - 在册 = 已人工质检 + 已定 split。build 只处理在册 task,不在册的一律跳过。
+#   - 主键是 LS task id(数据库主键,全局递增、跨项目唯一),不是视频文件名 ——
+#     视频一旦在 LS 重传,uuid 前缀就变、文件名跟着变,而 task id 不变。
+#   - 因此本文件不存视频文件名,build 时从导出 json 的 task.data.video 现查。
+#   - 新 task 用 `reconcile.py --assign` 按 assign 段确定性回填,不在 build 里静默改动。
+#
+# 已退役的 mixed-train 项目在 LS 侧已并入 yolo-train,其存量(bbox+动作全标)的 bbox
+# 作本轨的 bootstrap 种子(见 label-studio-pj/README.md §3),导出直接放 yolo-train/ 下。
+
+source:
+  projects: [yolo-train]        # 读 <export_root>/<项目>/ 的最新导出;写成列表是为了将来
+                                # 多源时不用改代码,现在只有一项(退役项目已并入)
+  export_root: raw/exports
+  video_dir: raw/videos
+
+output:
+  root: datasets                # 产物落 <root>/<组>/
+                                # 本轨产出 train/val —— 那是轨的定义,不是可调项,写在代码里
+
+sampling:
+  stride: 4                     # 每隔多少真实帧抽一张(30fps 下 4 ≈ 每秒 7.5 张)
+  jpg_quality: 90
+  keep_empty_frames: false      # 训练轨丢弃空帧,避免大量负样本稀释
+  rare_dense_sampling: true     # 稀有类在正常 stride 外额外密采相邻帧,以自然方式补量
+  rare_threshold: 200           # 某类在所有在册 task 中的总 keyframe 数低于此即触发
+
+assign:                         # 未在册 task 回填 split 的确定性参数
+  seed: 1337                    # 改了会重排未来的新 task 分配(不动已有)
+  ratios:
+    val: 0.2                    # 未列出的余额归 splits 的第一项(train)
+
+# ---- 清单:LS task id -> split ----
+# 由原 config.only_videos(16 条已质检) ∩ splits.yaml(18 条分配) 迁移而来。
+# splits.yaml 里有但未过质检的 task#56 / task#58 未收录,reconcile 会报为"未质检"。
+tasks:
+  50: train
+  51: train      # 原 splits.yaml 判 test,按"不做迁移、老的直接进训练集"回收
+  52: train
+  53: train      # 原 test,回收
+  54: train
+  55: train
+  59: train
+  60: train      # 稀有: short_brush
+  61: val
+  62: train      # 稀有: air_gun, brush_tip_out
+  68: train
+  69: train
+  77: train      # 原 test,回收
+  78: train      # 原 test,回收
+  84: train      # 稀有: air_gun
+  85: train      # 稀有: brush_tip_out
+
+# 注:本文件名里的 train 指的是 **split**,不是模型训练。
+# 本仓库只做数据 —— 模型超参、验收门槛、训练/评测脚本都不在这里。

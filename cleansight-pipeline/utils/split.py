@@ -1,73 +1,34 @@
 #!/usr/bin/env python3
 """
-稳定切分:splits.yaml 是 视频->split 的唯一真源。
+确定性切分的**纯函数** —— 只提供"给定键算出稳定的桶",不知道 split 叫什么名字。
 
-设计目标(用户明确要求"必须是稳定切分"):
-  - 同一视频永远同一 split,可复现。
-  - 新增视频不打乱已有分配(增量友好)。
-  - 一个视频的所有帧只进它的 split,绝不跨 split -> 杜绝时间相邻泄漏。
-  - 人工可覆盖(手动改 splits.yaml 里的值,永不被自动重排)。
+原先本模块还兼管 splits.yaml 的读写(视频 stem -> split)。yolo 与 actionmixed 的
+数据源分离后,per-video 清单下沉到了各数据集自己的配置里(yolo 见 yolo/manifest.py),
+共享的只剩下面两个纯函数,split 名称一律由各自的 yaml 决定。
 
-未归属视频用 hash(seed:stem) 确定性落到 train/val,由 assign() 显式回填并写回 yaml
-(不在 build 里静默改动)。
+稳定切分的性质(不可退化):
+  - 同一个键永远同一个桶,可复现。
+  - 新增条目不打乱已有分配(增量友好)。
+  - 人工可覆盖 —— 清单里写死的值永不被自动重排。
 """
 import hashlib
 from pathlib import Path
 
-import yaml
-
-ROOT = Path(__file__).resolve().parent.parent  # yolo_pipeline/(自包含)
-SPLITS_PATH = Path(__file__).resolve().parent.parent / "splits.yaml"
-
-VALID_SPLITS = {"train", "val", "test", "e2e_test"}
-# 参与训练/验证/测试的 split(进入 YOLO 数据集目录;e2e_test 留给端到端评测)
-DATASET_SPLITS = {"train", "val", "test"}
-
 
 def stem_of(name: str) -> str:
-    """视频文件名 -> splits.yaml 的 key(去扩展名)。"""
+    """视频文件名 -> 去扩展名的 stem。"""
     return Path(name).stem
 
 
-def load(splits_path: Path = SPLITS_PATH) -> dict:
-    if not splits_path.exists():
-        return {"val_ratio": 0.2, "seed": 1337, "assignments": {}}
-    data = yaml.safe_load(splits_path.read_text(encoding="utf-8")) or {}
-    if not data.get("assignments"):
-        data["assignments"] = {}
-    data.setdefault("test_ratio", 0.2)
-    data.setdefault("val_ratio", 0.2)
-    data.setdefault("seed", 1337)
-    return data
+def deterministic_bucket(key: str, seed) -> int:
+    """hash(seed:key) -> 0..99 的确定性桶。切点与 split 名由调用方按配置决定。"""
+    h = hashlib.sha1(f"{seed}:{key}".encode("utf-8")).hexdigest()
+    return int(h, 16) % 100
 
 
-def save(data: dict, splits_path: Path = SPLITS_PATH) -> None:
-    """写回,保留顶部注释块(以 # 开头的行)。"""
-    header = []
-    if splits_path.exists():
-        for line in splits_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("#") or line.strip() == "":
-                header.append(line)
-            else:
-                break
-    assignments = data.get("assignments", {})
-    body = [
-        f"test_ratio: {data.get('test_ratio', 0.2)}",
-        f"val_ratio: {data.get('val_ratio', 0.2)}",
-        f"seed: {data.get('seed', 1337)}",
-        "",
-        "assignments:",
-    ]
-    for stem in sorted(assignments):
-        body.append(f"  {stem}: {assignments[stem]}")
-    text = "\n".join(header + body) + "\n"
-    splits_path.write_text(text, encoding="utf-8")
-
-
-def deterministic_split(stem: str, seed: int, val_ratio: float, test_ratio: float = 0.0) -> str:
-    """hash(seed:stem) -> test/val/train,确定性、稳定。三路切分。"""
-    h = hashlib.sha1(f"{seed}:{stem}".encode("utf-8")).hexdigest()
-    bucket = int(h, 16) % 100
+def deterministic_split(key: str, seed, val_ratio: float, test_ratio: float = 0.0) -> str:
+    """三路切分的便捷封装(test/val/train),供仍用固定 split 名的调用方使用。"""
+    bucket = deterministic_bucket(key, seed)
     test_cutoff = round(test_ratio * 100)
     val_cutoff = test_cutoff + round(val_ratio * 100)
     if bucket < test_cutoff:
@@ -75,27 +36,3 @@ def deterministic_split(stem: str, seed: int, val_ratio: float, test_ratio: floa
     if bucket < val_cutoff:
         return "val"
     return "train"
-
-
-def get_split(stem: str, data: dict):
-    """返回已登记的 split;未登记返回 None(不隐式分配)。"""
-    return data.get("assignments", {}).get(stem)
-
-
-def assign(stems, data: dict) -> list:
-    """
-    给未归属的 stems 确定性回填 split(写进 data['assignments'],调用方负责 save)。
-    返回新增分配 [(stem, split), ...]。已归属的保持不动。
-    """
-    seed = data.get("seed", 1337)
-    test_ratio = data.get("test_ratio", 0.0)
-    val_ratio = data.get("val_ratio", 0.2)
-    assignments = data.setdefault("assignments", {})
-    added = []
-    for stem in stems:
-        if stem in assignments:
-            continue
-        split = deterministic_split(stem, seed, val_ratio, test_ratio)
-        assignments[stem] = split
-        added.append((stem, split))
-    return added

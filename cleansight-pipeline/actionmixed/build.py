@@ -58,6 +58,10 @@ SMALL_DATA_THRESHOLD = 5
 # Output subdirectories
 OUT_SUBDIRS = ("images", "frames", "labels")
 
+# 本数据集的 split 布局(段级切分,与 yolo 无关;原先借用 utils.split.DATASET_SPLITS,
+# 那个已随 yolo 两轨改造下沉,这里本地定义)
+DATASET_SPLITS = ("train", "val", "test")
+
 
 # ---------------------------------------------------------------------------
 # Directory & data.yaml helpers
@@ -204,7 +208,9 @@ def main():
     # Detection class mapping
     det_label2cid = {lab: i for i, lab in enumerate(UNIFIED_CLASSES)}
 
-    json_path = labelstudio.latest_export()
+    # 导出已按 LS 项目分子目录(raw/exports/<项目>/);本数据集读哪个由 config 指定。
+    # 退役的 mixed-train 项目已在 LS 侧并入 yolo-train,动作时序标注随之在那份导出里。
+    json_path = labelstudio.latest_export(project=cfg.get("exports_project"))
     tasks = labelstudio.load_tasks(json_path)
 
     # ---- Load completed tasks for incremental processing ----
@@ -541,7 +547,7 @@ def main():
             "frame_counts": dict(phase_frame_counts),
             "split_summary": {
                 sp: sum(s["frame_count"] for s in seg_infos if s["split"] == sp)
-                for sp in splitmod.DATASET_SPLITS
+                for sp in DATASET_SPLITS
             },
         })
 

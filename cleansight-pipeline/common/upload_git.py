@@ -3,7 +3,7 @@
 Upload built datasets to ModelScope repos via git.
 
 Repos:
-  - lhh010/cleansight-yolo         ← datasets/{group1_large,group2_small}
+  - lhh010/cleansight-yolo         ← yolo 的产物根(路径与组名从 yolo/*.yaml 读)
   - lhh010/cleansight-ActionMixed  ← datasets_actionmixed/
 
 Usage: python common/upload_git.py [--dry-run]
@@ -14,18 +14,22 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from yolo import manifest
+
 ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
 TMP = ROOT.parent / "_upload_tmp"
+
+_yolo_root = manifest.out_root(manifest.load(manifest.TRAIN_MANIFEST))
 
 REPOS = [
     {
         "name": "cleansight-yolo",
         "url": "https://www.modelscope.cn/datasets/lhh010/cleansight-yolo.git",
-        "sources": [
-            (ROOT / "datasets" / "group1_large", "group1_large"),
-            (ROOT / "datasets" / "group2_small", "group2_small"),
-        ],
-        "extra_files": [],  # tracking.md etc not needed in repo
+        # 组名来自 yolo/classes.yaml —— 加组不用改本文件
+        "sources": [(_yolo_root / g, g) for g in manifest.load_classes()],
+        "extra_files": [],  # tracking_*.md 由 yolo/upload.py 传,这里不重复
     },
     {
         "name": "cleansight-ActionMixed",

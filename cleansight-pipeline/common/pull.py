@@ -2,6 +2,9 @@
 """
 从 Label Studio 服务器下载导出 JSON 引用的原始视频到 raw/videos/。
 
+扫 raw/exports/ 下**所有**导出(含按 LS 项目分的子目录),取并集下载 —— 各轨的
+视频都落同一个 raw/videos/,由各自清单决定谁进哪个数据集。
+
 JSON 只存路径引用(data.video),视频本体在服务器。已存在且非空的文件会 [skip]。
 下载后做完整性抽查:优先 ffprobe 读时长/帧数;没有 ffprobe 时退化为"大小 > 0"。
 
@@ -20,7 +23,6 @@ import urllib.request
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from utils.common import load_config
 from utils import labelstudio
 
 LS_HOST = os.environ.get("LS_HOST", "").rstrip("/")
@@ -49,18 +51,25 @@ def main():
     if not LS_HOST or not LS_TOKEN:
         sys.exit("请先设置环境变量 LS_HOST 和 LS_TOKEN(见脚本头部说明)")
 
-    load_config()  # 目前不需要具体项,仅确认配置可读
-    json_path = labelstudio.latest_export()
+    exports = sorted(labelstudio.EXPORT_DIR.rglob("*.json"))
+    if not exports:
+        sys.exit(f"raw/exports/ 下没有导出 JSON: {labelstudio.EXPORT_DIR}")
     labelstudio.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    tasks = labelstudio.load_tasks(json_path)
-    print(f"导出: {json_path.name}  共 {len(tasks)} 个 task -> {labelstudio.VIDEO_DIR}")
+
+    # 视频名 -> LS 相对路径(并集去重:同一视频可能被多份导出引用)
+    refs = {}
+    for jp in exports:
+        n = 0
+        for t in labelstudio.load_tasks(jp):
+            rel = t.get("data", {}).get("video")
+            if rel:
+                refs[os.path.basename(rel)] = rel
+                n += 1
+        print(f"导出 {jp.parent.name}/{jp.name}: {n} 个 task")
+    print(f"合计 {len(refs)} 个不重复视频 -> {labelstudio.VIDEO_DIR}")
 
     ok, skip, fail, bad = 0, 0, 0, []
-    for t in tasks:
-        rel = t.get("data", {}).get("video")
-        if not rel:
-            continue
-        name = os.path.basename(rel)
+    for name, rel in sorted(refs.items()):
         out = labelstudio.VIDEO_DIR / name
         if out.exists() and out.stat().st_size > 0:
             print(f"  [skip] {name} 已存在")

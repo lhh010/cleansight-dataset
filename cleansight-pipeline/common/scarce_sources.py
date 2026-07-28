@@ -1,87 +1,87 @@
 #!/usr/bin/env python3
-"""解析 Label Studio 导出，建立 task -> 视频 -> 动作/检测类 映射，定位稀缺类来源。"""
-import json
-import re
-from pathlib import Path
-from collections import defaultdict
+"""
+解析 LS 导出,建立 task -> 视频 -> 动作/检测类 映射,定位稀缺类的来源片段。
 
-ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
-EXP = ROOT / "raw" / "exports" / "project-10-at-2026-07-12-02-49-086781a3.json"
-VID_DIR = ROOT / "raw" / "videos"
+与 scarce_checklist.py 的分工:那个按"已标注 / 已构建 / split 覆盖"给行动清单,
+这个只给**来源汇总**(哪几条片子有稀缺类),用于选片补采。
+"孤儿视频"的对账已归 common/reconcile.py,这里不再重复。
 
-DET_NAMES = {0: "hand", 1: "scope_control_body", 2: "scope_mid_section",
-             3: "scope_distal_end", 4: "syringe", 5: "air_gun",
-             6: "short_brush", 7: "brush_tip_out"}
-ACT_NAMES = {0: "idle", 1: "air_injection", 2: "flush", 3: "long_brush_insert",
-             4: "long_brush_withdraw", 5: "short_brush_cleaning"}
+数据源走训练轨清单(yolo/train.yaml)的 projects,检测类名取自 yolo/classes.yaml。
+
+用法(在 cleansight-pipeline/ 下执行):
+    python3 common/scarce_sources.py
+"""
+import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from utils import labelstudio          # noqa: E402
+from yolo import manifest              # noqa: E402
+
+ACT_NAMES = {"idle", "air_injection", "flush", "long_brush_insert",
+             "long_brush_withdraw", "short_brush_cleaning"}
 SCARCE_DET = {"air_gun", "brush_tip_out", "short_brush"}
 SCARCE_ACT = {"air_injection"}
 
-exp = json.load(open(EXP, encoding="utf-8"))
 
-def stem_of(video_path):
-    return Path(video_path).name.rsplit(".", 1)[0]
+def main():
+    m = manifest.load(manifest.TRAIN_MANIFEST)
+    groups = manifest.load_classes()
+    det_names = {lab for labs in groups.values() for lab in labs}
+    video_dir = manifest.video_dir(m)
 
-rows = []
-for t in exp:
-    tid = t["id"]
-    video = t["data"].get("video", "")
-    stem = stem_of(video)
-    acts, dets = set(), set()
-    nframes = None
-    annotated = False
-    for ann in t.get("annotations", []):
-        res = ann.get("result", [])
-        if res:
-            annotated = True
-        for r in res:
-            typ = r.get("type")
-            labels = r.get("value", {}).get("labels") or r.get("value", {}).get("timelinelabels")
-            if typ == "videorectangle":
-                nframes = r.get("value", {}).get("framesCount", nframes)
-            if labels:
-                for lab in labels:
-                    if lab in ACT_NAMES.values():
+    tasks, exports = manifest.load_tasks(m)
+    print(f"导出: {', '.join(exports)}")
+
+    rows = []
+    for t in sorted(tasks, key=lambda x: x["id"]):
+        name = labelstudio.task_video_name(t)
+        acts, dets = set(), set()
+        annotated, nframes = False, None
+        for ann in t.get("annotations", []):
+            if ann.get("result"):
+                annotated = True
+            for r in ann.get("result", []):
+                if r.get("type") == "videorectangle":
+                    nframes = r.get("value", {}).get("framesCount", nframes)
+                v = r.get("value", {})
+                for lab in (v.get("labels") or v.get("timelinelabels") or []):
+                    if lab in ACT_NAMES:
                         acts.add(lab)
-                    elif lab in DET_NAMES.values():
+                    elif lab in det_names:
                         dets.add(lab)
-    exists = (VID_DIR / f"{stem}.mp4").exists()
-    rows.append({
-        "tid": tid, "stem": stem, "annotated": annotated,
-        "acts": acts, "dets": dets, "nframes": nframes,
-        "video_on_disk": exists,
-    })
+        rows.append({"tid": int(t["id"]), "stem": pathlib.Path(name).stem,
+                     "annotated": annotated, "acts": acts, "dets": dets,
+                     "nframes": nframes,
+                     "on_disk": (video_dir / name).exists() if name else False})
 
-rows.sort(key=lambda r: r["tid"])
+    print(f"\n{'task':<6}{'video_stem':<48}{'annot':<7}{'disk':<6}{'actions / dets'}")
+    print("-" * 110)
+    for r in rows:
+        scar = (SCARCE_DET & r["dets"]) | (SCARCE_ACT & r["acts"])
+        mark = ("★稀缺:" + ",".join(sorted(scar))) if scar else ""
+        print(f"{r['tid']:<6}{r['stem'][:46]:<48}{str(r['annotated']):<7}"
+              f"{str(r['on_disk']):<6}{','.join(sorted(r['acts'])) or '-'}  "
+              f"[{','.join(sorted(r['dets'])) or '-'}] {mark}")
 
-print(f"{'task':<6}{'video_stem':<48}{'annot':<7}{'disk':<6}{'actions / scarce-dets'}")
-print("-" * 110)
-for r in rows:
-    scar = SCARCE_DET & r["dets"]
-    scar_a = SCARCE_ACT & r["acts"]
-    mark = ("★稀缺:" + ",".join(sorted(scar | scar_a))) if (scar or scar_a) else ""
-    print(f"{r['tid']:<6}{r['stem'][:46]:<48}{str(r['annotated']):<7}{str(r['video_on_disk']):<6}"
-          f"{','.join(sorted(r['acts'])) or '-'}  [{','.join(sorted(r['dets'])) or '-'}] {mark}")
+    print("\n=== 未标注 task(annotation 结果为空)===")
+    for r in rows:
+        if not r["annotated"]:
+            print(f"  task#{r['tid']}  {r['stem']}  disk={r['on_disk']}")
 
-# 未标注任务
-print("\n=== 未标注任务（annotation 结果为空）===")
-for r in rows:
-    if not r["annotated"]:
-        print(f"  task#{r['tid']}  {r['stem']}  disk={r['video_on_disk']}")
+    print("\n=== 稀缺检测类来源(已标注 task)===")
+    for cls in sorted(SCARCE_DET):
+        src = [f"task#{r['tid']}({r['stem'][:8]})" for r in rows
+               if r["annotated"] and cls in r["dets"]]
+        print(f"  {cls}: {src or '(无)'}")
 
-# 磁盘上有但导出里没有 task 的视频
-exp_stems = {r["stem"] for r in rows}
-disk_stems = {p.stem for p in VID_DIR.glob("*.mp4")}
-print("\n=== 磁盘有视频但 Label Studio 里无对应 task（完全没建任务）===")
-for s in sorted(disk_stems - exp_stems):
-    print(f"  {s}.mp4")
+    print("\n=== 稀缺动作类来源(已标注 task)===")
+    for cls in sorted(SCARCE_ACT):
+        src = [f"task#{r['tid']}({r['stem'][:8]})" for r in rows
+               if r["annotated"] and cls in r["acts"]]
+        print(f"  {cls}: {src or '(无)'}")
 
-# 稀缺类来源汇总
-print("\n=== 稀缺检测类来源（已标注任务）===")
-for cls in sorted(SCARCE_DET):
-    src = [f"task#{r['tid']}({r['stem'][:8]})" for r in rows if r["annotated"] and cls in r["dets"]]
-    print(f"  {cls}: {src or '（无）'}")
-print("\n=== 稀缺动作类来源（已标注任务）===")
-for cls in sorted(SCARCE_ACT):
-    src = [f"task#{r['tid']}({r['stem'][:8]})" for r in rows if r["annotated"] and cls in r["acts"]]
-    print(f"  {cls}: {src or '（无）'}")
+
+if __name__ == "__main__":
+    main()

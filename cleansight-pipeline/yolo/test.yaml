@@ -1,0 +1,34 @@
+# benchmark 轨(LS 项目 yolo-test)—— 配置 + 清单一体,与训练轨(train.yaml)零共享,
+# 除 classes.yaml(class id 映射必须一致)。
+#
+# 与训练轨的本质区别:这里是**策展**的评测集,不是随机 hold-out。
+#   - 源级隔离:在册 task 的整条源不得进 train/val(assert_disjoint 断言两表 task id 零交集;
+#     源头就是两个独立 LS 项目,本就不该重叠)。
+#   - 冻结:定版后只增不改。frozen_at 非空时 build_test 只许追加新 task id,
+#     改动已有条目一律拒绝。
+#
+# 等价类(ec_tags / 几何桶 / 按桶切片指标)本轮不落地 —— 待 yolo-test 产出首批标注、
+# benchmark 校验口径定下来后再加对应段。version / frozen_at 先占位。
+
+version: benchmark-det-v0.1
+frozen_at: null                 # 非空(ISO 时间串)即冻结
+
+source:
+  projects: [yolo-test]
+  export_root: raw/exports
+  video_dir: raw/videos
+
+output:
+  root: datasets                # 与训练轨同一产物根:datasets/<组>/images/test/
+                                # 本轨恒产出 test,故下面的清单条目不带 split 字段
+
+sampling:
+  stride: 4
+  jpg_quality: 90
+  keep_empty_frames: true       # 保留空帧作负样本(BENCHMARK_DETECTION.md §2 Group C 必测项)
+  empty_frame_stride: 8         # 空帧候选再稀释:每 N 个留 1 个,避免负样本灌爆 test
+  rare_dense_sampling: false    # benchmark 是策展的,人为加密会扭曲帧分布、指标失真
+
+# ---- 清单:LS task id 列表(split 恒为 test,无需逐条写) ----
+# 存量老数据不迁移进来 —— benchmark 由 yolo-test 项目从头标。
+tasks: []

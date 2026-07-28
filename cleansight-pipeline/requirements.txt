@@ -1,7 +1,8 @@
-# 拉取 / 转换(reconcile、pull、build)只需这三个:
+# 本仓库只做数据 —— 拉取 / 对账 / 转换 / 校验全部只需这几个。
+# 模型训练与评测(torch、ultralytics 那套大件)不在本仓库,故不列依赖。
 opencv-python-headless
 numpy
 pyyaml
-# 训练 / 验证(train、validate)另需 ultralytics(含 torch、cv2,大件)。
-# 建议装在本项目自己的 .venv 里,保持自包含。
-ultralytics
+pillow
+# 上传 ModelScope 时另需(SDK 方式的 upload.py):
+#   modelscope

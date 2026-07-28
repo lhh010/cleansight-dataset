@@ -1,149 +1,145 @@
 #!/usr/bin/env python3
 """
-对账 / 增量前置:把四方来源对齐,告诉你每次该做什么。
+对账 / 增量前置:把三方来源对齐,告诉你每次该做什么。
 
-四方:
-  - LS 导出 JSON(raw/exports/ 最新一份)—— 标注侧"应该有"的视频
-  - raw/videos/ ——   实际下载到磁盘的视频
-  - splits.yaml ——    已归属 split 的视频
-  - config.only_videos —— 已人工质检合格(白名单)
+三方(原先是四方:导出/磁盘/splits/白名单。yolo 两轨改造后,"已质检"与"已定 split"
+合并成了清单里的一条登记记录,所以四方变三方):
+  - LS 导出 JSON(raw/exports/<项目>/ 各取最新)—— 标注侧"应该有"的 task
+  - raw/videos/ ——                              实际下载到磁盘的视频
+  - yolo/{train,test}.yaml 的 tasks ——           已质检 + 已定归属的在册 task
 
-输出一张状态表 + 可执行分类:
-  未下载  导出引用了但磁盘没有        -> 跑 pull.py
-  孤儿    磁盘有但导出没引用          -> 陈旧下载,可清理
-  未质检  已下载但不在白名单          -> 人工质检后追加 config.only_videos
-  未归属  已质检但 splits.yaml 没分配 -> 跑本脚本 --assign 回填
-  遗失    splits.yaml 有但磁盘没有    -> 悬挂项,重下或从 splits.yaml 删(不自动删)
+分类:
+  未下载   导出引用了但磁盘没有            -> 跑 pull.py
+  未登记   已下载但不在清单                -> 人工质检后登记进对应清单(train 轨可 --assign)
+  遗失     在册但视频不在磁盘              -> 重下,或从清单删(不自动删)
+  导出缺失 在册但导出里查无此 task         -> 导出过期,或 task 已在 LS 删除
+  孤儿     磁盘有但任何导出都没引用        -> 陈旧下载,可清理
+
+注意:本脚本目前只服务 yolo 两轨(actionmixed 是段级切分,没有 per-video 归属问题)。
+校验/对账的整体口径待重新明确,这里维持既有分类不扩展。
 
 用法(在 cleansight-pipeline/ 下执行):
   python3 common/reconcile.py            # 只读,打印状态
-  python3 common/reconcile.py --assign   # 给"未归属"确定性回填 split 并写回 splits.yaml
+  python3 common/reconcile.py --assign   # 给训练轨"未登记"的 task 确定性回填并写回 train.yaml
 """
 import sys
-
-# --- 从子目录运行时也能 import 顶层 utils/ ---
 import pathlib
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from utils.common import load_config, is_whitelisted
-from utils import labelstudio, split as splitmod
+from utils import labelstudio                      # noqa: E402
+from yolo import manifest                          # noqa: E402
+
+# 轨定义:(展示名, 清单路径, 本轨产出的 split, 是否允许 --assign 回填)
+TRACKS = [
+    ("训练轨", manifest.TRAIN_MANIFEST, ("train", "val"), True),
+    ("benchmark", manifest.TEST_MANIFEST, ("test",), False),
+]
 
 
 def gather():
-    cfg = load_config()
-    only = cfg.get("only_videos") or []
-    label2group = labelstudio.build_label_index(cfg["groups"])
+    groups = manifest.load_classes()
+    label2group = labelstudio.build_label_index(groups)
+    on_disk = {f.name for f in labelstudio.VIDEO_DIR.glob("*.mp4")} \
+        if labelstudio.VIDEO_DIR.is_dir() else set()
 
-    json_path = labelstudio.latest_export()
-    tasks = labelstudio.load_tasks(json_path)
-    sp = splitmod.load()
-    assignments = sp.get("assignments", {})
-
-    # stem -> 记录
-    rows = {}
-
-    def row(stem):
-        return rows.setdefault(stem, {
-            "name": stem, "in_export": False, "on_disk": False,
-            "whitelisted": False, "has_det": False, "split": None,
+    tracks, referenced = [], set()
+    for label, path, splits, can_assign in TRACKS:
+        m = manifest.load(path)
+        rows, exports = [], []
+        try:
+            tasks, exports = manifest.load_tasks(m)
+        except SystemExit as e:
+            tasks = []
+            print(f"[{label}] 读取导出失败: {e}")
+        mtasks = m.get("tasks") or {}
+        for t in tasks:
+            tid = int(t["id"])
+            name = labelstudio.task_video_name(t)
+            referenced.add(name)
+            registered = tid in mtasks
+            rows.append({
+                "tid": tid, "name": name,
+                "on_disk": name in on_disk,
+                # 列表形态的清单不带 split(benchmark 恒为 test),用本轨唯一的那个显示
+                "split": (mtasks.get(tid) or splits[0]) if registered else None,
+                "registered": registered,
+                "has_det": bool(labelstudio.collect_tracks(t, label2group)),
+            })
+        tracks.append({
+            "label": label, "manifest": m, "path": path, "splits": splits,
+            "can_assign": can_assign, "rows": rows, "exports": exports,
+            "absent": manifest.missing(m, tasks),
         })
-
-    # 导出侧
-    for t in tasks:
-        name = labelstudio.task_video_name(t)
-        if not name:
-            continue
-        r = row(splitmod.stem_of(name))
-        r["name"] = name
-        r["in_export"] = True
-        r["whitelisted"] = is_whitelisted(name, only)
-        if labelstudio.collect_tracks(t, label2group):
-            r["has_det"] = True
-
-    # 磁盘侧
-    for f in sorted(labelstudio.VIDEO_DIR.glob("*.mp4")):
-        r = row(splitmod.stem_of(f.name))
-        r["name"] = f.name
-        r["on_disk"] = True
-        if not r["in_export"]:  # 孤儿也判一下白名单以免漏显
-            r["whitelisted"] = is_whitelisted(f.name, only)
-
-    # splits 侧
-    for stem, s in assignments.items():
-        row(stem)["split"] = s
-
-    return cfg, json_path, sp, rows
+    orphans = sorted(on_disk - referenced)
+    return tracks, orphans
 
 
-def classify(rows):
-    cats = {"未下载": [], "孤儿": [], "未质检": [], "未归属": [], "遗失": []}
-    for stem, r in rows.items():
-        if r["in_export"] and not r["on_disk"]:
-            cats["未下载"].append(r)
-        if r["on_disk"] and not r["in_export"]:
-            cats["孤儿"].append(r)
-        if r["on_disk"] and not r["whitelisted"]:
-            cats["未质检"].append(r)
-        if r["on_disk"] and r["whitelisted"] and r["split"] is None:
-            cats["未归属"].append(r)
-        if r["split"] is not None and not r["on_disk"]:
-            cats["遗失"].append(r)
-    return cats
+def print_track(tr):
+    print(f"\n=== {tr['label']}  ({tr['path'].name}"
+          f"{'  导出: ' + ', '.join(tr['exports']) if tr['exports'] else ''}) ===")
+    if not tr["rows"]:
+        print("  导出里没有 task。")
+    else:
+        print(f"  {'task':<8} {'视频':<50} {'磁盘':<5} {'检测':<5} {'登记/split'}")
+        print("  " + "-" * 85)
+        for r in sorted(tr["rows"], key=lambda x: x["tid"]):
+            yn = lambda b: "✓" if b else "·"   # noqa: E731
+            reg = r["split"] if r["registered"] else "—"
+            print(f"  {r['tid']:<8} {r['name'][:50]:<50} "
+                  f"{yn(r['on_disk']):<5} {yn(r['has_det']):<5} {reg}")
 
-
-def print_table(rows):
-    def yn(b):
-        return "✓" if b else "·"
-    print(f"\n{'视频 (stem)':<52} {'导出':<4} {'磁盘':<4} {'质检':<4} {'检测':<4} {'split'}")
-    print("-" * 82)
-    for stem in sorted(rows):
-        r = rows[stem]
-        print(f"{stem:<52} {yn(r['in_export']):<4} {yn(r['on_disk']):<4} "
-              f"{yn(r['whitelisted']):<4} {yn(r['has_det']):<4} {r['split'] or '—'}")
-
-
-def print_cats(cats):
-    hints = {
-        "未下载": "跑 pull.py",
-        "孤儿": "陈旧下载,可清理",
-        "未质检": "人工质检后追加 config.yaml 的 only_videos",
-        "未归属": "跑 reconcile.py --assign 回填",
-        "遗失": "重下,或从 splits.yaml 删除(不自动删)",
+    todo = {
+        "未登记": [r for r in tr["rows"] if not r["registered"]],
+        "遗失/未下载": [r for r in tr["rows"] if r["registered"] and not r["on_disk"]],
     }
-    print("\n=== 待办分类 ===")
-    any_action = False
-    for cat in ["未下载", "未质检", "未归属", "遗失", "孤儿"]:
-        items = cats[cat]
-        if not items:
-            continue
-        any_action = True
-        print(f"\n[{cat}] {len(items)} 个 —— {hints[cat]}")
-        for r in items:
-            print(f"    {r['name']}")
-    if not any_action:
-        print("  一切就绪,无待办。")
+    hints = {
+        "未登记": ("人工质检后登记进 " + tr["path"].name
+                 + (",或跑 --assign 确定性回填" if tr["can_assign"]
+                    else "(benchmark 入册是人工策展决策,不自动回填)")),
+        "遗失/未下载": "跑 common/pull.py 补下;确已作废则从清单删(不自动删)",
+    }
+    for cat, items in todo.items():
+        if items:
+            print(f"\n  [{cat}] {len(items)} 个 —— {hints[cat]}")
+            for r in items:
+                print(f"      task#{r['tid']}  {r['name']}")
+    if tr["absent"]:
+        print(f"\n  [导出缺失] {len(tr['absent'])} 个 —— 导出过期,或 task 已在 LS 删除")
+        print("      " + ", ".join(f"task#{t}" for t in tr["absent"]))
+    if not any(todo.values()) and not tr["absent"]:
+        print("\n  一切就绪,无待办。")
 
 
 def main():
     do_assign = "--assign" in sys.argv[1:]
-    cfg, json_path, sp, rows = gather()
-    print(f"导出: {json_path.name}   视频目录: {labelstudio.VIDEO_DIR}")
-    print_table(rows)
-    cats = classify(rows)
-    print_cats(cats)
+    print(f"视频目录: {labelstudio.VIDEO_DIR}")
+    manifest.assert_disjoint()
+
+    tracks, orphans = gather()
+    for tr in tracks:
+        print_track(tr)
+
+    if orphans:
+        print(f"\n=== 孤儿 {len(orphans)} 个 —— 磁盘有但任何导出都没引用,可清理 ===")
+        for n in orphans:
+            print(f"    {n}")
 
     if do_assign:
-        pending = [r["name"] for r in cats["未归属"]]
-        stems = [splitmod.stem_of(n) for n in pending]
-        added = splitmod.assign(stems, sp)
-        if added:
-            splitmod.save(sp)
-            print(f"\n=== --assign 回填 {len(added)} 个(已写回 splits.yaml)===")
-            for stem, s in added:
-                print(f"    {stem} -> {s}")
-            print("请 review 并提交 splits.yaml 的改动。")
-        else:
-            print("\n=== --assign:没有需要回填的视频 ===")
+        for tr in tracks:
+            if not tr["can_assign"]:
+                continue
+            pending = [r["tid"] for r in tr["rows"] if not r["registered"]]
+            if not pending:
+                print(f"\n=== --assign [{tr['label']}]:没有需要回填的 task ===")
+                continue
+            added = manifest.assign(tr["manifest"], pending, tr["splits"])
+            n = manifest.append_tasks(tr["manifest"], added)
+            print(f"\n=== --assign [{tr['label']}] 回填 {n} 个"
+                  f"(已写回 {tr['path'].name})===")
+            for tid, s in added:
+                print(f"    task#{tid} -> {s}")
+            print("请 review 并提交该 yaml 的改动。")
 
 
 if __name__ == "__main__":

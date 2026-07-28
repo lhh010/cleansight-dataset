@@ -1,10 +1,11 @@
 """Upload YOLO detection dataset to ModelScope at lhh010/cleansight-yolo.
 
-Uploads each group dir under cleansight-pipeline/datasets/ (images, labels,
-data.yaml). Also uploads yolo/tracking.md to the repo root.
+Uploads each group dir under the dataset root declared in yolo/train.yaml
+(images, labels, data.yaml), plus both tracks' tracking tables.
 
   lhh010/cleansight-yolo/
-    tracking.md
+    tracking_train.md      # 训练轨(train/val),yolo/build.py 生成
+    tracking_test.md       # benchmark 轨(test),yolo/build_test.py 生成
     group1_large/
       images/{train,val,test}/*.jpg
       labels/{train,val,test}/*.txt
@@ -17,7 +18,7 @@ Usage (在 cleansight-pipeline/ 下执行):
     python yolo/upload.py --skip-check # 跳过校验直接上传
 
 Prerequisite:
-    Run yolo/build.py first.
+    Run yolo/build.py (训练轨) 和 yolo/build_test.py (benchmark 轨) first.
 """
 import os
 import sys
@@ -33,9 +34,13 @@ sys.path.insert(0, str(REPO_ROOT))       # → config.py
 from modelscope.hub.api import HubApi
 from config import MS_ACCESS_TOKEN, MS_YOLO_REPO_ID
 from utils.check import check_dataset, print_result
+from common.check import yolo_criteria
+from yolo import manifest
 
-YOLO_DATASETS_PATH = str(PIPELINE_ROOT / "datasets")
-TRACKING_PATH = str(HERE.parent / "tracking.md")   # tracking.md 现随 yolo/ 数据集目录
+_train_m = manifest.load(manifest.TRAIN_MANIFEST)
+YOLO_DATASETS_PATH = str(manifest.out_root(_train_m))
+TRACKING_PATHS = [manifest.tracking_path(_train_m),
+                  manifest.tracking_path(manifest.load(manifest.TEST_MANIFEST))]
 
 SKIP_CHECK = "--skip-check" in sys.argv
 
@@ -51,14 +56,14 @@ if not SKIP_CHECK:
     print("  推送前校验 (check)")
     print("=" * 60)
     any_fail = False
+    criteria = yolo_criteria()
     for group_name in sorted(os.listdir(YOLO_DATASETS_PATH)):
         group_dir = os.path.join(YOLO_DATASETS_PATH, group_name)
         if not os.path.isdir(group_dir) or not os.path.exists(
             os.path.join(group_dir, "data.yaml")
         ):
             continue
-        from pathlib import Path
-        r = check_dataset(Path(group_dir), f"Group/{group_name}")
+        r = check_dataset(Path(group_dir), f"Group/{group_name}", **criteria)
         if not print_result(r):
             any_fail = True
     if any_fail:
@@ -73,17 +78,20 @@ else:
 api = HubApi()
 api.login(MS_ACCESS_TOKEN)
 
-# ---- Upload tracking.md ----
-if os.path.exists(TRACKING_PATH):
-    print(f"Uploading tracking.md ...")
+# ---- Upload each track's tracking table ----
+for tracking in TRACKING_PATHS:
+    if not tracking.exists():
+        print(f"  [skip] {tracking.name} 不存在(该轨尚未构建)")
+        continue
+    print(f"Uploading {tracking.name} ...")
     api.upload_file(
         repo_id=MS_YOLO_REPO_ID,
-        path_or_fileobj=TRACKING_PATH,
-        path_in_repo="tracking.md",
-        commit_message="Update dataset tracking table",
+        path_or_fileobj=str(tracking),
+        path_in_repo=tracking.name,
+        commit_message=f"Update {tracking.name}",
         repo_type="dataset",
     )
-    print("  tracking.md done")
+    print(f"  {tracking.name} done")
 
 # ---- Upload each phase ----
 groups = sorted([

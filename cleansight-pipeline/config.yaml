@@ -1,14 +1,21 @@
-# yolo_pipeline 中央配置。改这里,不要改脚本。
+# ⚠️ 本文件现在**只服务 actionmixed**。
+#
+# yolo 两轨的配置与清单已下沉到 yolo/ 自己的目录:
+#   yolo/classes.yaml  类别分组(两轨共享)
+#   yolo/train.yaml    训练轨:数据源 / 产物路径 / 抽帧 / 在册 task+split / 超参 / 验收
+#   yolo/test.yaml     benchmark 轨:同上,独立一份(生命周期不同,要冻结)
+# 原先的 splits.yaml(视频 -> split)也随之并入 yolo/train.yaml 的 tasks ——
+# 身份键从"视频文件名"换成了"LS task id"(文件名会随 LS 重传而变,task id 不会)。
+#
+# actionmixed 尚未下沉,暂用本文件;等它也下沉后本文件即可删除。
 # ---------------------------------------------------------------------------
 
-# 分组:组名 -> 该组的 YOLO 显示名列表(顺序即 class id,各组从 0 开始)。
-# 未列入任何组的检测类(如 short_brush、brush_tip_out)自动忽略。
-# 加类别只能追加到列表末尾——插中间会打乱已训权重的 class id 映射。
-groups:
-  group1_large: [hand, scope_control_body, scope_mid_section]
-  group2_small: [syringe, air_gun, scope_distal_end, short_brush, brush_tip_out]
+# 读 raw/exports/<项目>/ 下的最新导出。导出已按 LS 项目分子目录;
+# 退役的 mixed-train 项目已在 LS 侧并入 yolo-train,动作时序标注随之在那份导出里。
+exports_project: yolo-train
 
 # 已通过人工质检、确认标注完成(只有这些任务进数据集)。
+# 注:yolo 侧已改为按 LS task id 登记,这里仍是视频名前缀 —— 属 actionmixed 的待改项。
 only_videos:
   - 4807dbbe-clip      # task#59
   - 65d70028-clip      # task#61
@@ -31,28 +38,12 @@ only_videos:
 stride: 4           # 每隔多少真实帧抽一张(30fps 下 4 ≈ 每秒 7.5 张)
 jpg_quality: 90
 
-# 稀有类别密集采样：对框数 < rare_threshold 的类别，在正常抽帧之外
-# 额外采集其相邻帧（±(stride-1) 范围），以自然方式增加稀有样本。
+# 稀有类别密集采样:对框数 < rare_threshold 的类别,在正常抽帧之外
+# 额外采集其相邻帧(±(stride-1) 范围),以自然方式增加稀有样本。
 rare_dense_sampling: true
-rare_threshold: 200       # 某类在所有确认任务中的总 keyframe 数低于此值即触发密集采样
+rare_threshold: 200
 
-# 稳定切分参数(与 splits.yaml 顶部保持一致;splits.yaml 是分配的唯一真源)
-test_ratio: 0.2     # 未归属视频确定性回填时,落到 test 的比例(新增三路切分)
-val_ratio: 0.2      # 未归属视频确定性回填时,落到 val 的比例
-seed: 1337          # 确定性 hash 的盐;改了会重排未来的新视频分配(不动已有)
-
-# 训练超参
-train:
-  model: yolo11n.pt   # nano:小数据集 + 快;要更准换 yolo11s.pt
-  epochs: 100
-  imgsz: 640
-  batch: 16
-  patience: 20        # 连续多少 epoch 无提升则早停
-
-# 验收标准(可调)。validate 用它判 PASS/FAIL。
-# 当前数据集很小,大概率 FAIL,属实——数据变多后再收紧。
-acceptance:
-  overall_map50: 0.5       # 整体 mAP@0.5 下限
-  overall_map50_95: 0.3    # 整体 mAP@0.5:0.95 下限
-  per_class_recall: 0.7    # 逐类 recall 下限(漏检代价高)
-  per_class_precision: 0.5 # 逐类 precision 下限
+# 段级切分参数(actionmixed 按段级内存哈希分 split,不落 per-video 清单)
+test_ratio: 0.2
+val_ratio: 0.2
+seed: 1337          # 确定性 hash 的盐

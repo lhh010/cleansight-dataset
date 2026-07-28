@@ -1,87 +1,108 @@
 #!/usr/bin/env python3
-"""生成稀缺类补采/补标清单：对比 已标注任务 vs 已构建任务，定位待构建与待标注任务。"""
+"""
+稀缺类补采/补标清单:对比"已标注 vs 已构建",定位待构建与待标注的 task。
+
+数据源全部走训练轨清单(yolo/train.yaml)——导出项目、在册 task 与 split 都从那里读,
+不再硬编码某一份导出文件名。检测类名取自 yolo/classes.yaml。
+
+用法(在 cleansight-pipeline/ 下执行):
+    python3 common/scarce_checklist.py
+"""
 import json
-from pathlib import Path
+import sys
+import pathlib
 
-ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
-EXP = ROOT / "raw" / "exports" / "project-10-at-2026-07-12-02-49-086781a3.json"
-VID_DIR = ROOT / "raw" / "videos"
-COMPLETED = ROOT / "yolo" / "completed_tasks.json"   # yolo 数据集的完成清单
-SPLITS = ROOT / "splits.yaml"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-DET = {0:"hand",1:"scope_control_body",2:"scope_mid_section",3:"scope_distal_end",
-       4:"syringe",5:"air_gun",6:"short_brush",7:"brush_tip_out"}
-ACT = {0:"idle",1:"air_injection",2:"flush",3:"long_brush_insert",4:"long_brush_withdraw",5:"short_brush_cleaning"}
-SCARCE = {"air_gun","brush_tip_out","short_brush","air_injection"}
+from utils import labelstudio          # noqa: E402
+from yolo import manifest              # noqa: E402
 
-exp = json.load(open(EXP, encoding="utf-8"))
-built = set(json.load(open(COMPLETED, encoding="utf-8")).keys())
+# 动作类只用于给行加上下文(动作数据集是 actionmixed 的事,这里不做判断)
+ACT_NAMES = {"idle", "air_injection", "flush", "long_brush_insert",
+             "long_brush_withdraw", "short_brush_cleaning"}
+# 关注的稀缺项(依 archive/DATASET_BALANCE_REVIEW.md 的实例数偏低类)
+SCARCE = {"air_gun", "brush_tip_out", "short_brush", "air_injection"}
 
-# 读 splits.yaml 的人工分配
-splits = {}
-for line in SPLITS.read_text(encoding="utf-8").splitlines():
-    line = line.split("#")[0].strip()
-    if ":" in line and not line.endswith(":"):
-        k, v = line.split(":", 1)
-        k = k.strip()
-        if "-clip_" in k:
-            splits[k.strip()] = v.strip()
 
-def parse_task(t):
-    stem = Path(t["data"].get("video","")).stem
-    acts, dets, nframes = set(), set(), None
-    annotated = False
-    for ann in t.get("annotations", []):
-        if ann.get("result"):
-            annotated = True
-        for r in ann.get("result", []):
-            labs = r.get("value",{}).get("labels") or r.get("value",{}).get("timelinelabels") or []
-            if r.get("type")=="videorectangle":
-                nframes = r.get("value",{}).get("framesCount", nframes)
-            for l in labs:
-                if l in ACT.values(): acts.add(l)
-                elif l in DET.values(): dets.add(l)
-    return {"tid":str(t["id"]),"stem":stem,"annotated":annotated,"acts":acts,"dets":dets,
-            "nframes":nframes,"disk":VID_DIR.exists() and (VID_DIR/f"{stem}.mp4").exists(),
-            "split":splits.get(stem,"（未分配）")}
+def main():
+    m = manifest.load(manifest.TRAIN_MANIFEST)
+    groups = manifest.load_classes()
+    det_names = {lab for labs in groups.values() for lab in labs}
+    video_dir = manifest.video_dir(m)
 
-rows = [parse_task(t) for t in sorted(exp, key=lambda x:x["id"])]
+    tasks, exports = manifest.load_tasks(m)
+    completed_path = manifest.completed_path(m)
+    built = set(json.loads(completed_path.read_text(encoding="utf-8"))) \
+        if completed_path.exists() else set()
+    registered = m.get("tasks") or {}
 
-def fmt(r):
-    scar = SCARCE & (r["acts"]|r["dets"])
-    sm = ("★"+",".join(sorted(scar))) if scar else ""
-    return (f"task#{r['tid']:<3} {r['stem'][:8]}  split={r['split']:<6} "
-            f"disk={'Y' if r['disk'] else 'N'}  frames={r['nframes']}  "
-            f"acts=[{','.join(sorted(r['acts']))}] scarce {sm}")
+    print(f"导出: {', '.join(exports)}   在册 {len(registered)} / 已构建 {len(built)}")
 
-print("###### A. 已标注但【未构建进数据集】（零标注成本，最高 ROI）######")
-for r in rows:
-    if r["annotated"] and r["tid"] not in built:
-        print(" ", fmt(r))
+    rows = []
+    for t in sorted(tasks, key=lambda x: x["id"]):
+        tid = int(t["id"])
+        name = labelstudio.task_video_name(t)
+        acts, dets = set(), set()
+        annotated = False
+        nframes = None
+        for ann in t.get("annotations", []):
+            if ann.get("result"):
+                annotated = True
+            for r in ann.get("result", []):
+                if r.get("type") == "videorectangle":
+                    nframes = r.get("value", {}).get("framesCount", nframes)
+                v = r.get("value", {})
+                for lab in (v.get("labels") or v.get("timelinelabels") or []):
+                    if lab in ACT_NAMES:
+                        acts.add(lab)
+                    elif lab in det_names:
+                        dets.add(lab)
+        rows.append({
+            "tid": tid, "name": name, "annotated": annotated,
+            "acts": acts, "dets": dets, "nframes": nframes,
+            "disk": (video_dir / name).exists() if name else False,
+            "split": registered.get(tid, "（未登记）"),
+            "built": str(tid) in built,
+        })
 
-print("\n###### B. 未标注（需先在 Label Studio 标注）######")
-for r in rows:
-    if not r["annotated"]:
-        print(" ", fmt(r))
+    def fmt(r):
+        scar = SCARCE & (r["acts"] | r["dets"])
+        mark = ("★" + ",".join(sorted(scar))) if scar else ""
+        return (f"task#{r['tid']:<5} {r['name'][:24]:<26} split={str(r['split']):<12} "
+                f"disk={'Y' if r['disk'] else 'N'}  frames={r['nframes']}  "
+                f"acts=[{','.join(sorted(r['acts']))}] {mark}")
 
-print("\n###### C. 已标注且视频【不在磁盘】（需先从 Label Studio 重新下载视频）######")
-for r in rows:
-    if r["annotated"] and not r["disk"]:
-        print(" ", fmt(r))
+    print("\n###### A. 已标注但【未构建进数据集】(零标注成本,最高 ROI) ######")
+    for r in rows:
+        if r["annotated"] and not r["built"]:
+            print("  " + fmt(r))
 
-print("\n###### D. 已构建（基线，供参考）######")
-for r in rows:
-    if r["tid"] in built:
-        print(" ", fmt(r))
+    print("\n###### B. 未标注(需先在 Label Studio 标注) ######")
+    for r in rows:
+        if not r["annotated"]:
+            print("  " + fmt(r))
 
-# 稀缺类 split 覆盖现状（仅已构建任务）
-print("\n###### 稀缺类在【已构建】任务里的 split 覆盖 ######")
-built_rows = [r for r in rows if r["tid"] in built]
-for cls in sorted(SCARCE):
-    cov = {}
-    for r in built_rows:
-        if cls in r["acts"] or cls in r["dets"]:
-            cov.setdefault(r["split"], []).append(f"#{r['tid']}")
-    missing = [s for s in ("train","val","test") if s not in cov]
-    print(f"  {cls:<22} " + "  ".join(f"{s}:{cov.get(s,[])}" for s in ("train","val","test"))
-          + (f"   ⚠缺 {missing}" if missing else "   ✓全覆盖"))
+    print("\n###### C. 已标注但视频【不在磁盘】(需先跑 common/pull.py) ######")
+    for r in rows:
+        if r["annotated"] and not r["disk"]:
+            print("  " + fmt(r))
+
+    print("\n###### D. 已构建(基线,供参考) ######")
+    for r in rows:
+        if r["built"]:
+            print("  " + fmt(r))
+
+    print("\n###### 稀缺类在【已构建】task 里的 split 覆盖 ######")
+    splits_seen = sorted({str(r["split"]) for r in rows if r["built"]})
+    for cls in sorted(SCARCE):
+        cov = {}
+        for r in rows:
+            if r["built"] and (cls in r["acts"] or cls in r["dets"]):
+                cov.setdefault(str(r["split"]), []).append(f"#{r['tid']}")
+        missing = [s for s in splits_seen if s not in cov]
+        print(f"  {cls:<22} " + "  ".join(f"{s}:{cov.get(s, [])}" for s in splits_seen)
+              + (f"   ⚠缺 {missing}" if missing else "   ✓全覆盖"))
+
+
+if __name__ == "__main__":
+    main()

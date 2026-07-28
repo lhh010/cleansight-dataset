@@ -104,11 +104,12 @@
 
 ## 3. 源级与隔离规则
 
-1. **源级隔离 + 入册**：所有 test 源 `source_id` 写入 `benchmark_test.yaml`，从 train 侧项目 hard-exclude。
+1. **源级隔离 + 入册**：所有 test 源写入 benchmark 清单，从 train 侧项目 hard-exclude。
+   > 落地形态：`cleansight-pipeline/yolo/test.yaml` 的 `tasks`。**登记的是 LS task id 而非 source_id/视频名** —— 视频在 LS 重传会换 uuid 前缀、文件名跟着变，task id 不会。与训练轨清单 `yolo/train.yaml` 的零交集由 `yolo/manifest.py` 的 `assert_disjoint()` 强制。
 2. **裁片仍是源级隔离**：为 EC 切片从某刷洗任务裁同质短片时,**整条源任务**都归 test,不得再拿它的其它片段进 train/val。
 3. **可与 `action-test` 共享 test 源**：det benchmark 合并两者的帧；但每个 source 整条不在 train/val。
 4. **不与 train 源同场次**：相似型号/同次录制的相邻片段不得当 test。
-5. **定版后标注只增不改**：评测集选定后，LS 侧不再改动已有标注（版本冻结/发版由 pipeline 侧做）。
+5. **定版后标注只增不改**：评测集选定后，LS 侧不再改动已有标注（版本冻结/发版由 pipeline 侧做 —— `yolo/test.yaml` 的 `version` / `frozen_at`，非空后 `build_test.py` 只许追加新 task）。
 
 ---
 
@@ -124,7 +125,7 @@
 
 ## 5. 自查清单（交付评测集前）
 
-- [ ] 所有源 `source_id` 已入 `benchmark_test.yaml`,且不与 train/val 源同场次。
+- [ ] 所有 test task 已登记进 `cleansight-pipeline/yolo/test.yaml`,且不与 train/val 源同场次。
 - [ ] 每条测试片**已裁成单一视觉条件**（`ec_tags` 干净可切）。
 - [ ] 极小 <1% air_gun/brush_tip_out 桶有覆盖（det Group B 最缺）。
 - [ ] 异内镜型号帧已纳入（P0 全缺项）,勾 `diff_scope_model`。

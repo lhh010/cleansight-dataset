@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
-"""统计 yolo / actionmixed 两类数据集中各类样本数量。"""
+"""统计 yolo / actionmixed 两类数据集中各类样本数量。
+
+yolo 侧的产物路径来自 yolo/train.yaml,split 从各组 data.yaml 现读(数据集自己
+声明布局);actionmixed 侧暂沿用固定布局。
+"""
 import re
+import sys
 from pathlib import Path
 from collections import defaultdict
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from yolo import manifest
 
 ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipeline 根
 
@@ -10,13 +19,21 @@ ROOT = Path(__file__).resolve().parent.parent   # common/ 的上一级 = pipelin
 def parse_names(yaml_path):
     """从 data.yaml 解析 {id: name}。"""
     names = {}
-    text = yaml_path.read_text(encoding="utf-8")
-    cur = None
-    for line in text.splitlines():
+    for line in yaml_path.read_text(encoding="utf-8").splitlines():
         m = re.match(r"\s*(\d+):\s*(\S+)", line)
         if m:
             names[int(m.group(1))] = m.group(2)
     return names
+
+
+def parse_splits(yaml_path):
+    """从 data.yaml 解析声明了哪些 split(形如 `train: images/train`)。"""
+    splits = []
+    for line in yaml_path.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^(\w+):\s*images/(\S+)\s*$", line)
+        if m:
+            splits.append(m.group(1))
+    return splits
 
 
 def count_bbox(label_dir, names):
@@ -74,11 +91,13 @@ def report(title, names, counts, unit="实例", nfiles=None):
 
 
 # ============ 1. YOLO 数据集 ============
+yolo_root = manifest.out_root(manifest.load(manifest.TRAIN_MANIFEST))
 print("\n" + "#" * 56)
-print("# 1. YOLO 数据集 (datasets/) — 目标检测 bbox 实例")
+print(f"# 1. YOLO 数据集 ({yolo_root.name}/) — 目标检测 bbox 实例")
 print("#" * 56)
-yolo_root = ROOT / "datasets"
-for grp in sorted(d.name for d in yolo_root.iterdir() if d.is_dir()):
+if not yolo_root.is_dir():
+    print(f"  {yolo_root} 不存在,先跑 yolo/build.py")
+for grp in sorted(d.name for d in yolo_root.iterdir() if d.is_dir()) if yolo_root.is_dir() else []:
     gdir = yolo_root / grp
     yaml = gdir / "data.yaml"
     if not yaml.exists():
@@ -86,12 +105,15 @@ for grp in sorted(d.name for d in yolo_root.iterdir() if d.is_dir()):
     names = parse_names(yaml)
     agg = defaultdict(int)
     nfiles = 0
-    for split in ("train", "val", "test"):
+    per_split = {}
+    for split in parse_splits(yaml):
         c, nf = count_bbox(gdir / "labels" / split, names)
+        per_split[split] = sum(c.values())
         for k, v in c.items():
             agg[k] += v
         nfiles += nf
     report(f"[YOLO/{grp}]  ({len(names)} 类)", names, agg, "bbox", nfiles)
+    print("  逐 split: " + "  ".join(f"{s}={n}" for s, n in per_split.items()))
 
 
 # ============ 2. actionmixed 数据集 ============
