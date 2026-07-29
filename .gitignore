@@ -22,6 +22,7 @@ cleansight-pipeline/raw/
 cleansight-pipeline/datasets/
 cleansight-pipeline/datasets_actionseq/
 cleansight-pipeline/datasets_actionmixed/
+cleansight-yolo-pipeline/
 
 mix-label-annotated/
 .obsidian/

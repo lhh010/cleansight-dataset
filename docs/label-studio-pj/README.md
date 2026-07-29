@@ -26,7 +26,7 @@
 | 阶段 | 项目 | 标什么 | 服务 | coverage / 生命周期 |
 |------|------|--------|------|----------|
 | 训练 | **yolo-train** | 纯 bbox | YOLO 训练(**主**) | 外观空间,滚动 |
-| 评测 | **yolo-test** | bbox + `ec_tags`(clip 级) | 检测 benchmark | 检测难度桶,冻结 |
+| 评测 | **yolo-test** | bbox + `viewpoint` + `ec_tags`(clip 级) | 检测 benchmark | 检测难度桶,冻结 |
 
 **动作轨(action-label · 标动作)**
 
@@ -39,7 +39,7 @@
 
 > 四个项目名对称:`{yolo,action}-{train,test}`,一眼看出"哪条轨 + 训练还是评测"。`action-test` 的"混标"(动作 + GT 框)是它作为评测的**手段**(做 gap 测试),不是独立品类。
 >
-> **EC tag 设计(两套形式,有意为之)**:检测 test 用 **clip 级 `ec_tags`**(测试片裁成单一条件,整片一个 tag),动作 test 用 **段级 `ec_env` timeline**(整段测、条件按时段出现,须逐段标)——**形式不同是因为测试单元不同**(det 可散帧/单一条件短片,seg 必须整条序列),不是遗留待改。两套词表的逐项映射见 [§7 共享口径](#7-共享口径标签集--ec-词表映射--优先级)。几何桶(尺度/遮挡/拥挤)一律由 build **从框自动派生、不打 tag**——详见 [yolo-test.md](yolo-test.md)。
+> **EC tag 设计(两套形式,有意为之)**:检测 test 用 **clip 级 `viewpoint` 单选 + `ec_tags`**(测试片裁成单一条件,整片打标),动作 test 用 **段级 `ec_env` timeline**(整段测、条件按时段出现,须逐段标)——**形式不同是因为测试单元不同**(det 可散帧/单一条件短片,seg 必须整条序列),不是遗留待改。两套词表的逐项映射见 [§7 共享口径](#7-共享口径标签集--ec-词表映射--优先级)。几何桶(尺度/遮挡/拥挤)一律由 build **从框自动派生、不打 tag**——详见 [yolo-test.md](yolo-test.md)。
 
 ---
 
@@ -143,19 +143,21 @@
 
 | 类别 | `ec_env`(seg 段级) | `ec_tags`(det 片级) | 对应 benchmark EC 维度 |
 |---|---|---|---|
+| 正常光照(基线) | —（基线,不打） | `normal_light` | DET §2 D-成像环境 基线 |
 | 偏暗 | `dark` | `dark` | DET §2 D-成像环境 / SEG §2 Group D |
 | 反光水珠 | `glare_water` | `glare_water` | DET §2 D-成像环境 |
 | 过曝逆光 | `overexposed` | `overexposed` | DET §2 D-成像环境 |
 | 快速模糊 | `fast_blur` | `fast_blur` | DET §2 D-运动模糊 |
+| 失焦 | —（det 独有） | `defocus` | DET §2 D-运动模糊 严重失焦 |
 | 背景杂乱 | `cluttered_bg` | `cluttered_bg` | DET §2 D-成像环境 |
 | 相似干扰物 | `similar_distractor` | `similar_distractor` | DET §2 Group C 负样本 |
 | 镜头晃/视觉突变 | `visual_jitter` | —(seg 独有) | SEG §2 Group D 过分割诱因 |
 | 异常/未定义动作 | `abnormal_action` | —(seg 独有) | SEG §2 Group D idle/异常 |
 | 异内镜型号 | —(det 独有) | `diff_scope_model` | DET §2 Group D 来源多样性 |
 | 异操作者 | —(det 独有) | `diff_operator` | DET §2 Group D 来源多样性 |
-| 异机位/角度 | —(det 独有) | `diff_viewpoint` | DET §2 Group D 来源多样性 |
+| 机位 | —（det 独有,独立单选） | `viewpoint`（`cam1`/`cam2`/`cam3`,独立单选,非 ec_tag） | DET §2 Group D 来源多样性 |
 
-> 前 6 项两套共享(**同名**);`visual_jitter` / `abnormal_action` 是时序侧特有(段内噪声/异常段);`diff_*` 三项是检测侧整片级来源标(seg 的来源多样性走源级选片,不打段级 tag)。det 的**对抗-可见性**不用 ec 词表,走 `action-test` 的 `adv_visibility` Choices(见 SEG §2 Group A / §5)。
+> 前 6 项两套共享(**同名**);`visual_jitter` / `abnormal_action` 是时序侧特有(段内噪声/异常段);`normal_light`/`defocus` 是检测侧补的**光照基线 / 失焦**(seg 侧基线暂隐式,未打段级 tag);`diff_scope_model`/`diff_operator` 是检测侧整片级来源标,`viewpoint`（`cam1`/`cam2`/`cam3`）为检测侧**独立单选**字段(固定机位绝对属性,既不在 ec_tag 词表、亦非「diff」flag);seg 的来源多样性走源级选片,不打段级 tag。det 的**对抗-可见性**不用 ec 词表,走 `action-test` 的 `adv_visibility` Choices(见 SEG §2 Group A / §5)。
 
 ### 7.3 优先级词汇(全项目统一)
 

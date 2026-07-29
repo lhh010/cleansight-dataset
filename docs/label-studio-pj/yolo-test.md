@@ -15,6 +15,7 @@
 - **测试单元 = 帧 / 同质短片，允许散帧**：检测可按帧策展、跨源抽帧（与 seg 的整段要求相反）。
 - **不拿整条刷洗任务当测试单元**：训练侧 clip = 一次完整刷洗任务，但那是**明暗/反光/模糊混杂**的异质片。检测 test 要为等价类切片,须从任务里**裁出「单一条件」的同质短片/帧**（专挑那段暗的、那几帧模糊的）——检测可散帧,正好做得到。
 - **等价类用 clip 级 `ec_tags`（多选），取代旧的段级 `ec_env` timeline**：因为测试片已裁成单一条件,整片打一个 tag 就干净,不必再逐段画时间范围。
+- **机位 `viewpoint` 另立单选（不在 `ec_tags` 里）**：固定监控下机位是每片必有的绝对属性,不是「条件」,更不是「diff」flag——所以单独成字段、每片必选（`cam1`/`cam2`/`cam3`）。
 - **几何类桶不打 tag**：尺度/遮挡/拥挤/截断由 build **从框自动派生**（见 §2.2）,采集侧只需「采到含该情形的帧」。
 - **与 `action-test` 分工**：det benchmark = `action-test` 切帧 ∪ 本项目帧。本项目专收**时序无关但检测很难**的桶——极小尺度、跨源泛化、负样本、拥挤 NMS。
 
@@ -22,7 +23,7 @@
 
 ## 1. LS Settings（labeling config）
 
-标准 8 类目标框配置(同 [README.md](README.md) §7.1) + **clip 级 `ec_tags`**（`Choices` 多选,整片打标；无 timeline；ec_tags 词表见 [README.md](README.md) §7.2）：
+标准 8 类目标框配置(同 [README.md](README.md) §7.1) + **clip 级 `viewpoint`（单选,每片必选一个机位）+ `ec_tags`（`Choices` 多选,整片打标）**；无 timeline；词表见 [README.md](README.md) §7.2：
 
 ```xml
 <View>
@@ -43,26 +44,38 @@
   </Labels>
 
   <Header value="等价类 tag(整条测试片打标,已按单一条件裁好)"/>
+
+  <!-- 机位:固定监控,每片必选一个(整片绝对属性,非"diff"flag) -->
+  <Choices name="viewpoint" toName="video" choice="single" showInLine="true">
+    <Choice value="cam1"/>   <!-- 操作者左前方 -->
+    <Choice value="cam2"/>   <!-- 操作者右前方 -->
+    <Choice value="cam3"/>   <!-- 预留:未来更换拍摄场景 -->
+  </Choices>
+
+  <!-- 视觉/环境条件:多选,按"applicable 即打,含基线";光照正常必勾 normal_light -->
   <Choices name="ec_tags" toName="video" choice="multiple" showInLine="true">
-    <!-- 视觉/环境:测试片裁成同质,一片一条件 -->
+    <!-- 成像/光照(含基线 normal_light) -->
+    <Choice value="normal_light"/>
     <Choice value="dark"/>
-    <Choice value="glare_water"/>
     <Choice value="overexposed"/>
+    <!-- 清晰度:fast_blur=快速运动模糊,defocus=失焦;两者可同时勾 -->
     <Choice value="fast_blur"/>
+    <Choice value="defocus"/>
+    <!-- 表面/背景/干扰 -->
+    <Choice value="glare_water"/>
     <Choice value="cluttered_bg"/>
-    <!-- 干扰 -->
     <Choice value="similar_distractor"/>
-    <!-- 来源(整片级) -->
+    <!-- 来源多样性(暂为 flag;出现第 2 个值时升为单选枚举,同 viewpoint) -->
     <Choice value="diff_scope_model"/>
     <Choice value="diff_operator"/>
-    <Choice value="diff_viewpoint"/>
   </Choices>
 </View>
 ```
 
 **约定**
 - 8 类照常全标（bbox=可见）；空帧 `allowEmpty` 保留作负样本。
-- `ec_tags` 是**整条测试片级**多选：片已按单一视觉条件裁好,通常勾 1 个视觉条件 +（可能的）来源/干扰标；正常光照片可不勾视觉条件。
+- `viewpoint` 是**整条测试片级单选（每片必选一个）**：固定监控下机位是绝对属性,不再是「diff」flag。跨机位泛化 = 按 `viewpoint` 切片（cam1 训练 → cam2 recall 衰减）。
+- `ec_tags` 是**整条测试片级**多选,按 **「applicable 即打、含基线」**：光照正常**必勾 `normal_light`**（不再用「不勾」隐式表达）；有 `fast_blur`/`defocus` 再叠加（两者可同时勾,见 §4 异质片规则）。纯基线片 = 只勾了 `normal_light`、无任何退化。
 - **不打 timeline、不标动作**。
 - 几何类桶（尺度/遮挡/拥挤/截断）**不在此勾**,由 build 从框算（§2.2）。
 
@@ -76,9 +89,10 @@
 
 | 组 | tag | 要求 | 优先级 |
 |---|---|---|---|
-| 视觉/环境 | `dark` / `glare_water` / `overexposed` / `fast_blur` / `cluttered_bg` | 每类**裁 ≥1 条同质片**,整片就是该条件 | P1 |
+| 视觉/环境 | `normal_light`(基线) / `dark` / `overexposed` / `fast_blur` / `defocus` / `glare_water` / `cluttered_bg` | 每类**裁 ≥1 条同质片**,整片就是该条件；`normal_light` 是光照基线,正常片必勾 | 基线/P1 |
 | 来源多样性(全缺) | `diff_scope_model` | **异内镜型号**帧,seen vs 异型号衰减切片 | **P0** |
-| 来源多样性 | `diff_operator` / `diff_viewpoint` | 异操作者 / 异机位角度 | P1 |
+| 来源多样性 | `diff_operator` | 异操作者 | P1 |
+| 机位(每片必选单选) | `viewpoint`: `cam1`(左前) / `cam2`(右前) / `cam3`(预留) | 固定监控机位为绝对属性；跨机位泛化按 `viewpoint` 切片(cam1↔cam2 衰减) | P1 |
 | 干扰 | `similar_distractor` | 外部相似物在场（**不画框**,见 §4） | P1 |
 
 > 来源类多为**跨源散帧**,正是检测「按帧策展、跨视频抽帧」的用武之地。
@@ -118,7 +132,9 @@
 - **极小目标框务必紧贴**：<1% 目标 IoU 对框精度极敏感,宁可放大画面逐个框准。
 - **每帧全类标全**：跨源泛化帧里 hand/scope 等常见类也要标,漏标会污染该帧的 precision/recall 评测。
 - **相似干扰物**：「长得像但不是目标器械/管路」的外部物**不画框**,并勾 `ec_tags = similar_distractor`——防外部误检的评测依据。
-- **`ec_tags` 打标**：测试片已裁成单一条件,勾对应视觉条件；来源/干扰照实勾；正常片可不勾视觉条件。
+- **`viewpoint` 打标**：每条片**必选一个机位**（`cam1`/`cam2`/`cam3`）——固定监控机位是绝对属性,不是「diff」flag。
+- **`ec_tags` 打标**：测试片已裁成单一条件,**按 applicable 即打、含基线**——光照正常勾 `normal_light`,有模糊再叠 `fast_blur`/`defocus`（可同勾）,来源/干扰照实勾。**绝不用「不勾」隐式表达条件**。
+- **异质片先裁再标**：一段视频前半模糊（失焦/运动模糊）、后半清晰等异质情况,**按条件边界裁成多条同质片**（检测单帧/散帧,裁开零成本）——模糊段勾 `fast_blur`/`defocus`,清晰段勾 `normal_light`。若两种退化**同帧共存、无法裁分**（如失焦镜头里的快速运动）,则两者都勾,该帧同时进两个退化桶（真实数据,理应如此）。
 - **负样本纯净**：空帧确保画面确实无任何 8 类目标再留作负样本。
 
 ---
@@ -126,7 +142,8 @@
 ## 5. 自查清单（交付评测集前）
 
 - [ ] 所有 test task 已登记进 `cleansight-pipeline/yolo/test.yaml`,且不与 train/val 源同场次。
-- [ ] 每条测试片**已裁成单一视觉条件**（`ec_tags` 干净可切）。
+- [ ] 每条测试片**已裁成单一条件**（`ec_tags` 干净可切）；异质片（如前模糊后清晰）已按条件边界**裁开**再标。
+- [ ] 每条片已选 `viewpoint`（`cam1`/`cam2`/`cam3`），光照正常片已勾 `normal_light`（**无隐式基线**）。
 - [ ] 极小 <1% air_gun/brush_tip_out 桶有覆盖（det Group B 最缺）。
 - [ ] 异内镜型号帧已纳入（P0 全缺项）,勾 `diff_scope_model`。
 - [ ] 空帧负样本、相似干扰物各有覆盖,干扰物未画框且已勾 `similar_distractor`。
