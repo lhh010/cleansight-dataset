@@ -33,21 +33,24 @@ assign:                         # 未在册 task 回填 split 的确定性参数
     val: 0.2                    # 未列出的余额归 splits 的第一项(train)
 
 # ---- 清单:LS task id -> split ----
-# 由原 config.only_videos(16 条已质检) ∩ splits.yaml(18 条分配) 迁移而来。
-# splits.yaml 里有但未过质检的 task#56 / task#58 未收录,reconcile 会报为"未质检"。
+# val 为手动按 bbox 类型覆盖分配(非 hash),确保 val 覆盖全部 8 类且 train 各类充足。
+# 当前 val(61,71,73)覆盖全部 8 类;train 保留 air_gun×4 / short_brush×5,各类充足。
 tasks:
   50: train
-  51: train      # 原 splits.yaml 判 test,按"不做迁移、老的直接进训练集"回收
+  51: train      # 原 test,回收
   52: train
   53: train      # 原 test,回收
   54: train
   55: train
+  58: train      # short_brush_cleaning, 4 类
   59: train
   60: train      # 稀有: short_brush
-  61: val
+  61: val        # flush+insert+withdraw, 6 类
   62: train      # 稀有: air_gun, brush_tip_out
   68: train
   69: train
+  71: val        # 手动: 含 short_brush + 5 类, 3 phases, 补 val 覆盖
+  73: val        # 手动: 含 air_gun + short_brush + 6 类, air_injection, 补 val 缺失两类
   77: train      # 原 test,回收
   78: train      # 原 test,回收
   84: train      # 稀有: air_gun

@@ -9,9 +9,9 @@
 | 数据来源 | Label Studio 标注平台，yolo-train 项目（内镜清洗操作视频） |
 | 标注类型 | 目标检测（VideoRectangle bounding box） |
 | 数据格式 | Ultralytics YOLO（归一化中心点坐标） |
-| 视频任务数 | 16 个（在册，已质检） |
-| 总样本数 | 20,333 张图像（stride=4 抽帧 + 稀有类密集采样） |
-| 划分方式 | 按 Label Studio 任务整段切分（train: 15 task / val: 1 task） |
+| 视频任务数 | 19 个（在册，已质检） |
+| 总样本数 | 21,100 张图像（stride=4 抽帧 + 稀有类密集采样） |
+| 划分方式 | 按 Label Studio 任务整段切分（train: 16 task / val: 3 task） |
 | 管线版本 | yolo 两轨分离（train.yaml + test.yaml），配置与清单下沉至 yolo/ |
 
 ## 处理流程
@@ -58,11 +58,11 @@ yolo/build.py 读取每个 task 的 split
 
 | Split | 任务数 | Task ID |
 |-------|--------|---------|
-| **train** | 15 | 50, 51, 52, 53, 54, 55, 59, 60, 62, 68, 69, 77, 78, 84, 85 |
-| **val** | 1 | 61 |
+| **train** | 16 | 50, 51, 52, 53, 54, 55, 58, 59, 60, 62, 68, 69, 77, 78, 84, 85 |
+| **val** | 3 | 61, 71, 73 |
 | **test** | 0 | —（benchmark 轨独立策展，由 `yolo/build_test.py` 从 yolo-test 项目构建） |
 
-> ⚠️ **重要**：每个 LS 任务的所有帧完整保留在同一 split 内，不存在跨 split 的时间相邻帧泄漏，确保验证/测试指标的可靠性和可复现性。
+> val 为手动按 bbox 类型覆盖分配：61(6 类，flush+insert+withdraw) / 71(5 类含 short_brush，3 phases) / 73(6 类含 air_gun+short_brush，air_injection)，确保 val 覆盖全部 8 类且 train 各类充足。
 
 ---
 
@@ -75,22 +75,22 @@ lhh010/cleansight-yolo/
 ├── group1_large/                   # 大目标检测组
 │   ├── data.yaml                   # YOLO 数据配置（含 train/val/test 路径）
 │   ├── images/
-│   │   ├── train/                  # 10,410 张
-│   │   ├── val/                    # 1,244 张
+│   │   ├── train/                  # 9,719 张
+│   │   ├── val/                    # 2,467 张
 │   │   └── test/                   # 0 张（benchmark 待策展）
 │   └── labels/
-│       ├── train/                  # 10,410 个 .txt
-│       ├── val/                    # 1,244 个 .txt
+│       ├── train/                  # 9,719 个 .txt
+│       ├── val/                    # 2,467 个 .txt
 │       └── test/                   # 0 个 .txt
 └── group2_small/                   # 小目标检测组
     ├── data.yaml
     ├── images/
-    │   ├── train/                  # 7,557 张
-    │   ├── val/                    # 1,122 张
+    │   ├── train/                  # 6,652 张
+    │   ├── val/                    # 2,262 张
     │   └── test/                   # 0 张
     └── labels/
-        ├── train/                  # 7,557 个 .txt
-        ├── val/                    # 1,122 个 .txt
+        ├── train/                  # 6,652 个 .txt
+        ├── val/                    # 2,262 个 .txt
         └── test/                   # 0 个 .txt
 ```
 
@@ -137,23 +137,23 @@ class_id cx cy w h    # 全部为归一化 [0,1] 浮点数
 
 | 类别 | train帧 | val帧 | train框 | val框 |
 |------|---------|-------|---------|-------|
-| hand | 10,041 | 1,239 | 18,640 | 2,354 |
-| scope_control_body | 8,411 | 1,184 | 8,411 | 1,184 |
-| scope_mid_section | 8,039 | 1,184 | 8,039 | 1,184 |
-| **合计** | **10,410** | **1,244** | **35,090** | **4,722** |
+| hand | 9,351 | 2,456 | 17,327 | 4,607 |
+| scope_control_body | 7,748 | 2,305 | 7,748 | 2,305 |
+| scope_mid_section | 7,737 | 2,198 | 7,737 | 2,198 |
+| **合计** | **9,719** | **2,467** | **32,812** | **9,110** |
 
 ### group2_small
 
 | 类别 | train帧 | val帧 | train框 | val框 |
 |------|---------|-------|---------|-------|
-| syringe | 3,627 | 367 | 3,627 | 367 |
-| air_gun | 837 | 0 | 837 | 0 |
-| scope_distal_end | 5,104 | 755 | 5,104 | 755 |
-| short_brush | 1,165 | 0 | 1,165 | 0 |
+| syringe | 3,317 | 367 | 3,317 | 367 |
+| air_gun | 837 | 135 | 837 | 135 |
+| scope_distal_end | 4,526 | 1,895 | 4,526 | 1,895 |
+| short_brush | 329 | 2 | 329 | 2 |
 | brush_tip_out | 168 | 228 | 168 | 228 |
-| **合计** | **7,557** | **1,122** | **10,901** | **1,350** |
+| **合计** | **6,652** | **2,262** | **9,177** | **2,627** |
 
-> ⚠️ `air_gun` 和 `short_brush` 在 val 中无样本 —— val 仅 task#61，这两类在其采样帧中未出现。后续增量补 task 到 val 可解决。
+> ✅ val 已覆盖全部 8 类。`short_brush` 在 val 中仅 2 帧（task#71/73 中含该类别但其出现窗口极短），后续增量可改善。
 
 ---
 
