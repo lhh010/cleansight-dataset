@@ -84,8 +84,8 @@ def print_track(tr):
         print(f"  {'task':<8} {'视频':<50} {'磁盘':<5} {'检测':<5} {'登记/split'}")
         print("  " + "-" * 85)
         for r in sorted(tr["rows"], key=lambda x: x["tid"]):
-            yn = lambda b: "✓" if b else "·"   # noqa: E731
-            reg = r["split"] if r["registered"] else "—"
+            yn = lambda b: "[Y]" if b else "[ ]"   # noqa: E731
+            reg = r["split"] if r["registered"] else "--"
             print(f"  {r['tid']:<8} {r['name'][:50]:<50} "
                   f"{yn(r['on_disk']):<5} {yn(r['has_det']):<5} {reg}")
 

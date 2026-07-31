@@ -1,18 +1,18 @@
 # CleanSight YOLO Dataset
 
-内镜清洗巡检目标检测数据集，由 [lhh010/cleansight-raw](https://www.modelscope.cn/datasets/lhh010/cleansight-raw) 原始标注数据经标准化流水线处理后生成的标准 YOLO 格式数据集。
+内镜清洗巡检目标检测数据集，由 Label Studio 标注平台（yolo-train 项目）原始标注数据经标准化流水线处理后生成的标准 YOLO 格式数据集。
 
 ## 数据集概述
 
 | 项目 | 说明 |
 |------|------|
-| 数据来源 | Label Studio 标注平台 Project #10，内镜清洗操作视频 |
-| 原始数据集 | [lhh010/cleansight-raw](https://www.modelscope.cn/datasets/lhh010/cleansight-raw) |
+| 数据来源 | Label Studio 标注平台，yolo-train 项目（内镜清洗操作视频） |
 | 标注类型 | 目标检测（VideoRectangle bounding box） |
 | 数据格式 | Ultralytics YOLO（归一化中心点坐标） |
-| 视频任务数 | 10 个 |
-| 总样本数 | 1696 张图像（stride=12 抽帧，仅保留有标注帧） |
-| 划分方式 | 按 Label Studio 任务整段切分（train/val/test = 6:2:2） |
+| 视频任务数 | 16 个（在册，已质检） |
+| 总样本数 | 20,333 张图像（stride=4 抽帧 + 稀有类密集采样） |
+| 划分方式 | 按 Label Studio 任务整段切分（train: 15 task / val: 1 task） |
+| 管线版本 | yolo 两轨分离（train.yaml + test.yaml），配置与清单下沉至 yolo/ |
 
 ## 处理流程
 
@@ -22,43 +22,45 @@
 - 从 Label Studio 服务器下载导出 JSON 中引用的原始视频到本地 `raw/videos/`
 - 对每个视频做完整性校验（ffprobe 读时长/帧数）
 
-### 2. 对账与切分（common/reconcile.py + splits.yaml）
-- 对齐"导出 JSON / 本地视频 / 白名单 / 切分清单"四方数据
-- **按 Label Studio 任务粒度**分配 train/val/test（`splits.yaml` 为唯一真源）
+### 2. 对账与切分（common/reconcile.py + train.yaml）
+- 对齐"导出 JSON / 本地视频 / 清单"三方数据
+- **按 Label Studio 任务粒度**分配 train/val（`train.yaml` 的 `tasks` 段为唯一真源）
 - **关键约束**：同一 LS 任务的所有帧全部进入同一 split，绝不跨 split，杜绝时间相邻帧泄漏
+- task 身份键使用 **LS task id**（全局唯一，重传视频不变）
 
 ### 3. 转 YOLO 格式（yolo/build.py）
 - **关键帧对齐**：LS 标注帧号按标注端 fps 计算，通过 `scale = ls_fps/real_fps` 映射到真实帧号，消除漂移
 - **线性插值**：LS 只存关键帧 bbox，中间帧由相邻关键帧线性插值得到；`enabled=False` 表示目标离场
-- **抽帧采样**：`stride=12`（30fps 下约 2.5 张/秒），仅保留含分组内目标的帧（空帧丢弃）
+- **抽帧采样**：`stride=4`（30fps 下约 7.5 张/秒），仅保留含分组内目标的帧（空帧丢弃）
+- **稀有类密集采样**：keyframe < 200 的类别（air_gun, brush_tip_out, short_brush）在正常 stride 外额外采集相邻帧
 - **坐标转换**：LS 左上角百分比 → YOLO 归一化中心点 `(cx, cy, w, h)`，裁剪到 [0,1]
-- **类别过滤**：仅保留分组内类别（`short_brush`、`brush_tip_out` 未列入任何组，自动忽略）
+- **类别过滤**：仅保留分组内类别；未列入任一组的类别自动忽略
 
 ### 4. 稳定切分契约
 
 ```
-splits.yaml（入库，唯一真源）
+train.yaml tasks（入库，唯一真源）
     ↓
-yolo/build.py 读取每个视频的 split
+yolo/build.py 读取每个 task 的 split
     ↓
-同一视频所有帧 → 全部进入该 split
+同一 task 所有帧 → 全部进入该 split
     ↓
-产出 datasets/<组>/images/{train,val,test}/ + labels/{train,val,test}/
+产出 datasets/<组>/images/{train,val}/ + labels/{train,val}/
 ```
 
-- 已分配视频的 split **永不被自动重排**，人工可改
-- 新增视频由 `--assign` 按 `hash(seed:stem)` 确定性回填，不打乱已有分配
-- 增量更新天然安全：已有视频 split 不变，只回填新视频
+- 已分配 task 的 split **永不被自动重排**，人工可改
+- 新增 task 由 `--auto-assign` 按 `hash(seed:tid)` 确定性回填，不打乱已有分配
+- 增量更新天然安全：已有 task split 不变，只回填新 task
 
 ---
 
 ## 数据集划分
 
-| Split | 任务数 | 占比 | 视频任务 |
-|-------|--------|------|----------|
-| **train** | 6 | 60% | 05ba4406-clip, 218f9117-clip, 4807dbbe-clip, 7e8f5b4f-clip, af0e7803-clip, ed1f1353-clip |
-| **val** | 2 | 20% | 687e3c78-clip, 65d70028-clip |
-| **test** | 2 | 20% | b004acff-clip, 9f93cf16-clip |
+| Split | 任务数 | Task ID |
+|-------|--------|---------|
+| **train** | 15 | 50, 51, 52, 53, 54, 55, 59, 60, 62, 68, 69, 77, 78, 84, 85 |
+| **val** | 1 | 61 |
+| **test** | 0 | —（benchmark 轨独立策展，由 `yolo/build_test.py` 从 yolo-test 项目构建） |
 
 > ⚠️ **重要**：每个 LS 任务的所有帧完整保留在同一 split 内，不存在跨 split 的时间相邻帧泄漏，确保验证/测试指标的可靠性和可复现性。
 
@@ -69,32 +71,34 @@ yolo/build.py 读取每个视频的 split
 ```
 lhh010/cleansight-yolo/
 ├── README.md
-├── group1_large/                  # 大目标检测组
-│   ├── data.yaml                  # YOLO 数据配置（含 train/val/test 路径）
+├── tracking_train.md               # 训练轨构建追踪表
+├── group1_large/                   # 大目标检测组
+│   ├── data.yaml                   # YOLO 数据配置（含 train/val/test 路径）
 │   ├── images/
-│   │   ├── train/                 # 568 张
-│   │   ├── val/                   # 549 张
-│   │   └── test/                  # 40 张
+│   │   ├── train/                  # 10,410 张
+│   │   ├── val/                    # 1,244 张
+│   │   └── test/                   # 0 张（benchmark 待策展）
 │   └── labels/
-│       ├── train/                 # 568 个 .txt
-│       ├── val/                   # 549 个 .txt
-│       └── test/                  # 40 个 .txt
-└── group2_small/                  # 小目标检测组
+│       ├── train/                  # 10,410 个 .txt
+│       ├── val/                    # 1,244 个 .txt
+│       └── test/                   # 0 个 .txt
+└── group2_small/                   # 小目标检测组
     ├── data.yaml
     ├── images/
-    │   ├── train/                 # 37 张
-    │   ├── val/                   # 500 张
-    │   └── test/                  # 2 张
+    │   ├── train/                  # 7,557 张
+    │   ├── val/                    # 1,122 张
+    │   └── test/                   # 0 张
     └── labels/
-        ├── train/                 # 37 个 .txt
-        ├── val/                   # 500 个 .txt
-        └── test/                  # 2 个 .txt
+        ├── train/                  # 7,557 个 .txt
+        ├── val/                    # 1,122 个 .txt
+        └── test/                   # 0 个 .txt
 ```
 
 ### 图片命名规范
 ```
-{task序号:02d}_{视频名前12位}_{真实帧号:06d}.jpg
-例: 06_687e3c78-cli_002329.jpg
+t{task_id}_{frame:06d}[_dense].jpg
+例: t59_000042.jpg        → task#59 的 stride 帧
+    t59_000045_dense.jpg  → task#59 的稀有类密采帧
 ```
 
 ### 标注格式（YOLO 归一化）
@@ -120,8 +124,10 @@ class_id cx cy w h    # 全部为归一化 [0,1] 浮点数
 | 0 | `syringe` | 注射器 |
 | 1 | `air_gun` | 气枪 |
 | 2 | `scope_distal_end` | 内镜头端 |
+| 3 | `short_brush` | 短毛刷 |
+| 4 | `brush_tip_out` | 刷头外露 |
 
-> **注意**：原始标注中的 `short_brush`（短毛刷）和 `brush_tip_out`（刷头外露）未列入上述任一组，在当前数据集中被自动排除。如需加入，在 `config.yaml` 对应组末尾追加即可（**只能追加，不可插入中间**，否则打乱已训权重的 class_id 映射）。
+> **注意**：类别列表只能追加到末尾，不可插入中间 —— 否则打乱已训权重的 class_id 映射。
 
 ---
 
@@ -129,23 +135,25 @@ class_id cx cy w h    # 全部为归一化 [0,1] 浮点数
 
 ### group1_large
 
-| 类别 | train帧 | val帧 | test帧 | train框 | val框 | test框 |
-|------|---------|-------|--------|---------|-------|--------|
-| hand | 565 | 492 | 20 | 1077 | 915 | 40 |
-| scope_control_body | 494 | 492 | 36 | 494 | 492 | 36 |
-| scope_mid_section | 422 | 496 | 25 | 422 | 496 | 25 |
-| **合计** | **568** | **549** | **40** | **1993** | **1903** | **101** |
+| 类别 | train帧 | val帧 | train框 | val框 |
+|------|---------|-------|---------|-------|
+| hand | 10,041 | 1,239 | 18,640 | 2,354 |
+| scope_control_body | 8,411 | 1,184 | 8,411 | 1,184 |
+| scope_mid_section | 8,039 | 1,184 | 8,039 | 1,184 |
+| **合计** | **10,410** | **1,244** | **35,090** | **4,722** |
 
 ### group2_small
 
-| 类别 | train帧 | val帧 | test帧 | train框 | val框 | test框 |
-|------|---------|-------|--------|---------|-------|--------|
-| syringe | 0 | 254 | 0 | 0 | 254 | 0 |
-| air_gun | 33 | 46 | 0 | 33 | 46 | 0 |
-| scope_distal_end | 4 | 301 | 2 | 4 | 301 | 2 |
-| **合计** | **37** | **500** | **2** | **37** | **601** | **2** |
+| 类别 | train帧 | val帧 | train框 | val框 |
+|------|---------|-------|---------|-------|
+| syringe | 3,627 | 367 | 3,627 | 367 |
+| air_gun | 837 | 0 | 837 | 0 |
+| scope_distal_end | 5,104 | 755 | 5,104 | 755 |
+| short_brush | 1,165 | 0 | 1,165 | 0 |
+| brush_tip_out | 168 | 228 | 168 | 228 |
+| **合计** | **7,557** | **1,122** | **10,901** | **1,350** |
 
-> ⚠️ `syringe` 和 `air_gun` 在 test 中无样本 — 当前 10 个视频数据量有限，这两类仅出现在 val 视频中。增量数据后可改善 test 覆盖。
+> ⚠️ `air_gun` 和 `short_brush` 在 val 中无样本 —— val 仅 task#61，这两类在其采样帧中未出现。后续增量补 task 到 val 可解决。
 
 ---
 
@@ -162,20 +170,6 @@ from modelscope.msdatasets import MsDataset
 
 # 下载整个数据集
 ds = MsDataset.load("lhh010/cleansight-yolo", split="master")
-```
-
-或直接访问子目录：
-
-```python
-from modelscope.hub.api import HubApi
-
-api = HubApi()
-# 下载指定文件
-api.download_file(
-    repo_id="lhh010/cleansight-yolo",
-    file_path="group1_large/data.yaml",
-    output_dir="./my_dataset/group1_large/"
-)
 ```
 
 ### 方式二：Git LFS
@@ -215,56 +209,48 @@ model.train(data="path/to/group1_large/data.yaml", epochs=100, imgsz=640)
 
 ```bash
 cd cleansight-pipeline
-python -m venv .venv
-.venv/bin/pip install opencv-python-headless numpy pyyaml pillow ultralytics
+pip install opencv-python-headless numpy pyyaml pillow ultralytics modelscope
 ```
 
 ### 完整流程
 
 ```bash
-# 1. 将 LS 导出 JSON 放入 raw/exports/
+# 1. 将 LS 导出 JSON 放入 raw/exports/yolo-train/
 # 2. 下载视频
 export LS_HOST=http://<LS地址>:8080 LS_TOKEN=<AccessToken>
 python common/pull.py
 
 # 3. 对账 & 分配 split
-python common/reconcile.py        # 查看状态
-python common/reconcile.py --assign  # 确定性回填 split（写入 splits.yaml）
-# 必要时手工调整 splits.yaml
+python common/reconcile.py             # 查看状态
+python common/reconcile.py --assign    # 确定性回填 split（写入 train.yaml）
 
 # 4. 生成 YOLO 数据集
-python yolo/build.py
+python yolo/build.py                   # 增量构建
+python yolo/build.py --force           # 全量重建
 
-# 5. 训练 & 验证（可选）
-python yolo/train.py
-python yolo/validate.py
+# 5. 上传到 ModelScope
+python yolo/upload.py                  # 含校验卡口
+python yolo/upload.py --skip-check     # 跳过校验直接上传
 ```
-
-### 上传到 ModelScope
-
-```bash
-# 在 cleansight-pipeline 目录下执行
-python yolo/upload.py
-```
-
-上传脚本将 `cleansight-pipeline/datasets/` 下的各组分目录上传到 `lhh010/cleansight-yolo`。
 
 ### 增量更新
 
 ```bash
-# 新导出 JSON 放入 raw/exports/
-python common/reconcile.py        # 看差异
-python common/pull.py     # 补下新视频
-# 质检新视频后追加到 config.yaml 的 only_videos
-python common/reconcile.py --assign  # 仅回填新视频，已有 split 不变
-python yolo/build.py           # 重建数据集
-python yolo/upload.py             # 更新 ModelScope
+# 新导出 JSON 放入 raw/exports/yolo-train/
+python common/reconcile.py             # 看差异
+python common/pull.py                  # 补下新视频
+# 质检新 task 后登记进 yolo/train.yaml
+python common/reconcile.py --assign    # 仅回填新 task
+python yolo/build.py                   # 增量重建（已处理 task 秒级跳过）
+python yolo/upload.py                  # 增量上传（ModelScope SDK 自动去重）
 ```
 
 ---
 
 ## 相关链接
 
-- 原始数据集：[lhh010/cleansight-raw](https://www.modelscope.cn/datasets/lhh010/cleansight-raw)
-- 处理流水线：`cleansight-pipeline/`（项目仓库内）
-- 标注平台：Label Studio (Project #10)
+- 数据集：[lhh010/cleansight-yolo](https://www.modelscope.cn/datasets/lhh010/cleansight-yolo)
+- 原始数据：[lhh010/cleansight-raw](https://www.modelscope.cn/datasets/lhh010/cleansight-raw)
+- 项目仓库：[lhh010/cleansight-dataset](https://github.com/lhh010/cleansight-dataset)
+- 标注平台：Label Studio (yolo-train 项目)
+- Benchmark 设计：[BENCHMARK_DETECTION.md](https://github.com/lhh010/cleansight-dataset/blob/main/docs/BENCHMARK_DETECTION.md)
