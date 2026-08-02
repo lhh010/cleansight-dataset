@@ -5,7 +5,8 @@
 > 原始需求源：[BENCHMARK_DETECTION.md](../BENCHMARK_DETECTION.md)
 > 生命周期：**源级隔离**；评测集一旦定版，标注**只增不改**。版本管理（冻结/发版/打 tag）**由 pipeline 侧负责，不在 LS**。
 > （本文的 clip 级 `ec_tags` 是标注标签，与版本无关。）
-> 总纲：[README.md](README.md)
+> 总纲：[README.md](README.md)  
+> 标签判定细则：[yolo-test-tag-criteria.md](yolo-test-tag-criteria.md)（标注员打标参考 + 审查依据）
 
 ---
 
@@ -16,7 +17,7 @@
 - **不拿整条刷洗任务当测试单元**：训练侧 clip = 一次完整刷洗任务，但那是**明暗/反光/模糊混杂**的异质片。检测 test 要为等价类切片,须从任务里**裁出「单一条件」的同质短片/帧**（专挑那段暗的、那几帧模糊的）——检测可散帧,正好做得到。
 - **等价类用 clip 级 `ec_tags`（多选），取代旧的段级 `ec_env` timeline**：因为测试片已裁成单一条件,整片打一个 tag 就干净,不必再逐段画时间范围。
 - **机位 `viewpoint` 另立单选（不在 `ec_tags` 里）**：固定监控下机位是每片必有的绝对属性,不是「条件」,更不是「diff」flag——所以单独成字段、每片必选（`cam1`/`cam2`/`cam3`）。
-- **几何类桶不打 tag**：尺度/遮挡/拥挤/截断由 build **从框自动派生**（见 §2.2）,采集侧只需「采到含该情形的帧」。
+- **几何类桶不打 tag**：尺度/**客观遮挡**/拥挤/截断由 build **从框自动派生**（见 §2.2）,采集侧只需「采到含该情形的帧」。（片级人工主观 flag `severe_occlusion` 不属几何桶,见 §1。）
 - **与 `action-test` 分工**：det benchmark = `action-test` 切帧 ∪ 本项目帧。本项目专收**时序无关但检测很难**的桶——极小尺度、跨源泛化、负样本、拥挤 NMS。
 
 ---
@@ -65,6 +66,8 @@
     <Choice value="glare_water"/>
     <Choice value="cluttered_bg"/>
     <Choice value="similar_distractor"/>
+    <!-- 目标可见性:severe_occlusion=严重遮挡,人工主观判断(不绑几何 IoU 阈值;器械被手大面积遮挡、影响识别时即勾)。与 build 按框几何派生的遮挡桶正交、并存 -->
+    <Choice value="severe_occlusion"/>
     <!-- 来源多样性(暂为 flag;出现第 2 个值时升为单选枚举,同 viewpoint) -->
     <Choice value="diff_scope_model"/>
     <Choice value="diff_operator"/>
@@ -76,8 +79,9 @@
 - 8 类照常全标（bbox=可见）；空帧 `allowEmpty` 保留作负样本。
 - `viewpoint` 是**整条测试片级单选（每片必选一个）**：固定监控下机位是绝对属性,不再是「diff」flag。跨机位泛化 = 按 `viewpoint` 切片（cam1 训练 → cam2 recall 衰减）。
 - `ec_tags` 是**整条测试片级**多选,按 **「applicable 即打、含基线」**：光照正常**必勾 `normal_light`**（不再用「不勾」隐式表达）；有 `fast_blur`/`defocus` 再叠加（两者可同时勾,见 §4 异质片规则）。纯基线片 = 只勾了 `normal_light`、无任何退化。
+- **`severe_occlusion`（严重遮挡）按人工主观判断打**：目测器械被手大面积遮挡、影响识别时即勾,**不依赖几何 IoU 阈值**。它与 §2.2 由 build 按框几何派生的遮挡桶（重遮挡 30–70% / 近全遮挡 >70%）是**两套并存**：几何桶逐框客观派生用于切片评测,`severe_occlusion` 是整片级人工采集 flag。
 - **不打 timeline、不标动作**。
-- 几何类桶（尺度/遮挡/拥挤/截断）**不在此勾**,由 build 从框算（§2.2）。
+- 几何类桶（尺度/**客观遮挡**/拥挤/截断）**不在此勾**,由 build 从框算（§2.2）;注意 `severe_occlusion` **不属于**几何桶,是片级人工主观 flag（见上一条）。
 
 ---
 
@@ -94,6 +98,7 @@
 | 来源多样性 | `diff_operator` | 异操作者 | P1 |
 | 机位(每片必选单选) | `viewpoint`: `cam1`(左前) / `cam2`(右前) / `cam3`(预留) | 固定监控机位为绝对属性；跨机位泛化按 `viewpoint` 切片(cam1↔cam2 衰减) | P1 |
 | 干扰 | `similar_distractor` | 外部相似物在场（**不画框**,见 §4） | P1 |
+| 目标可见性 | `severe_occlusion` | 手挡器械、影响识别的同质片;**人工主观判断,不绑几何阈值**(与 §2.2 几何遮挡桶并存) | P1 |
 
 > 来源类多为**跨源散帧**,正是检测「按帧策展、跨视频抽帧」的用武之地。
 
@@ -134,6 +139,7 @@
 - **相似干扰物**：「长得像但不是目标器械/管路」的外部物**不画框**,并勾 `ec_tags = similar_distractor`——防外部误检的评测依据。
 - **`viewpoint` 打标**：每条片**必选一个机位**（`cam1`/`cam2`/`cam3`）——固定监控机位是绝对属性,不是「diff」flag。
 - **`ec_tags` 打标**：测试片已裁成单一条件,**按 applicable 即打、含基线**——光照正常勾 `normal_light`,有模糊再叠 `fast_blur`/`defocus`（可同勾）,来源/干扰照实勾。**绝不用「不勾」隐式表达条件**。
+- **`severe_occlusion` 打标**：整片出现手大面积遮挡器械、影响识别时勾——**凭目测主观判断,不查 IoU**;与几何遮挡桶无关（后者 build 自动算）。
 - **异质片先裁再标**：一段视频前半模糊（失焦/运动模糊）、后半清晰等异质情况,**按条件边界裁成多条同质片**（检测单帧/散帧,裁开零成本）——模糊段勾 `fast_blur`/`defocus`,清晰段勾 `normal_light`。若两种退化**同帧共存、无法裁分**（如失焦镜头里的快速运动）,则两者都勾,该帧同时进两个退化桶（真实数据,理应如此）。
 - **负样本纯净**：空帧确保画面确实无任何 8 类目标再留作负样本。
 
@@ -149,4 +155,5 @@
 - [ ] 空帧负样本、相似干扰物各有覆盖,干扰物未画框且已勾 `similar_distractor`。
 - [ ] 每帧全类标全、极小目标框紧贴。
 - [ ] 几何桶（尺度/遮挡/拥挤/截断）采集侧已覆盖（bucket 由 build 自动算）。
+- [ ] 严重遮挡同质片有覆盖,已勾 `severe_occlusion`（人工主观 flag,非几何桶）。
 - [ ] 标注定版后不再改动，交 pipeline 侧冻结发版。

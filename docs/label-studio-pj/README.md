@@ -139,7 +139,7 @@
 
 ### 7.2 EC 词表映射(两套并存,一表对照)
 
-`ec_env`(段级 TimelineLabels,`action-test`)与 `ec_tags`(片级 Choices,`yolo-test`)是**两种形式、部分重叠**的等价类词表。形式差异源于测试单元(seg 整段 → 段级 timeline;det 单一条件短片 → 片级 tag)。几何桶(尺度/遮挡/拥挤/截断)两套都**不打 tag**,由 build 从框几何自动派生。
+`ec_env`(段级 TimelineLabels,`action-test`)与 `ec_tags`(片级 Choices,`yolo-test`)是**两种形式、部分重叠**的等价类词表。形式差异源于测试单元(seg 整段 → 段级 timeline;det 单一条件短片 → 片级 tag)。几何桶(尺度/**客观遮挡**/拥挤/截断)两套都**不打 tag**,由 build 从框几何自动派生(det 另有片级人工主观 flag `severe_occlusion`,见下表,不属于几何桶)。
 
 | 类别 | `ec_env`(seg 段级) | `ec_tags`(det 片级) | 对应 benchmark EC 维度 |
 |---|---|---|---|
@@ -151,13 +151,14 @@
 | 失焦 | —（det 独有） | `defocus` | DET §2 D-运动模糊 严重失焦 |
 | 背景杂乱 | `cluttered_bg` | `cluttered_bg` | DET §2 D-成像环境 |
 | 相似干扰物 | `similar_distractor` | `similar_distractor` | DET §2 Group C 负样本 |
+| 严重遮挡 | —（det 独有） | `severe_occlusion` | DET §2 D-遮挡（人工主观 flag,与几何桶并存） |
 | 镜头晃/视觉突变 | `visual_jitter` | —(seg 独有) | SEG §2 Group D 过分割诱因 |
 | 异常/未定义动作 | `abnormal_action` | —(seg 独有) | SEG §2 Group D idle/异常 |
 | 异内镜型号 | —(det 独有) | `diff_scope_model` | DET §2 Group D 来源多样性 |
 | 异操作者 | —(det 独有) | `diff_operator` | DET §2 Group D 来源多样性 |
 | 机位 | —（det 独有,独立单选） | `viewpoint`（`cam1`/`cam2`/`cam3`,独立单选,非 ec_tag） | DET §2 Group D 来源多样性 |
 
-> 前 6 项两套共享(**同名**);`visual_jitter` / `abnormal_action` 是时序侧特有(段内噪声/异常段);`normal_light`/`defocus` 是检测侧补的**光照基线 / 失焦**(seg 侧基线暂隐式,未打段级 tag);`diff_scope_model`/`diff_operator` 是检测侧整片级来源标,`viewpoint`（`cam1`/`cam2`/`cam3`）为检测侧**独立单选**字段(固定机位绝对属性,既不在 ec_tag 词表、亦非「diff」flag);seg 的来源多样性走源级选片,不打段级 tag。det 的**对抗-可见性**不用 ec 词表,走 `action-test` 的 `adv_visibility` Choices(见 SEG §2 Group A / §5)。
+> 前 6 项两套共享(**同名**);`visual_jitter` / `abnormal_action` 是时序侧特有(段内噪声/异常段);`normal_light`/`defocus` 是检测侧补的**光照基线 / 失焦**(seg 侧基线暂隐式,未打段级 tag);`severe_occlusion` 是检测侧补的**片级人工主观遮挡 flag**(凭目测打,不绑几何 IoU 阈值;与几何遮挡桶正交并存);`diff_scope_model`/`diff_operator` 是检测侧整片级来源标,`viewpoint`（`cam1`/`cam2`/`cam3`）为检测侧**独立单选**字段(固定机位绝对属性,既不在 ec_tag 词表、亦非「diff」flag);seg 的来源多样性走源级选片,不打段级 tag。det 的**对抗-可见性**不用 ec 词表,走 `action-test` 的 `adv_visibility` Choices(见 SEG §2 Group A / §5)。
 
 ### 7.3 优先级词汇(全项目统一)
 
